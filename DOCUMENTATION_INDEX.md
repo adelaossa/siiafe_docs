@@ -13,13 +13,18 @@
 
 **Documentation / Documentación**:
 - **Module README**: [01 - configuration/README.md](./01%20-%20configuration/README.md) 🇪🇸🇺🇸
-- **🇪🇸 Spanish**: [Documentación de Estructura de Códigos](./01%20-%20configuration/es/DOCUMENTACION_ESTRUCTURA_CODIGOS.md)
-- **🇺🇸 English**: [Coding Structure Documentation](./01%20-%20configuration/en/CODING_STRUCTURE_DOCUMENTATION.md)
+- **🇪🇸 Spanish**: 
+  - [Documentación de Estructura de Códigos](./01%20-%20configuration/es/DOCUMENTACION_ESTRUCTURA_CODIGOS.md)
+  - [Documentación de Formularios Dinámicos](./01%20-%20configuration/es/DOCUMENTACION_FORMULARIOS_DINAMICOS.md)
+- **🇺🇸 English**: 
+  - [Coding Structure Documentation](./01%20-%20configuration/en/CODING_STRUCTURE_DOCUMENTATION.md)
+  - [Dynamic Forms Documentation](./01%20-%20configuration/en/DYNAMIC_FORMS_DOCUMENTATION.md)
 
 **Key Features / Características Principales**:
 - Realm-based organization / Organización basada en ámbitos
 - Hierarchical code structures / Estructuras de códigos jerárquicas
 - Code type relationships / Relaciones entre tipos de código
+- Dynamic forms system / Sistema de formularios dinámicos
 - Colombian regulatory compliance / Cumplimiento regulatorio colombiano
 
 ---
