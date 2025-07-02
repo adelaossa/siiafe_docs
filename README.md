@@ -137,7 +137,7 @@ The system is primarily designed for:
 - **Procurement Module**
 - **Treasury Module**
 - **Reporting Module**
-- **Configuration Module**
+- **[Configuration Module](./01%20-%20configuration/)** 🚧 *In Development*
 - **Audit Module**
 
 ## Compliance & Standards
@@ -193,6 +193,28 @@ The system is primarily designed for:
 ## Installation & Setup
 
 *This section will be updated as development progresses.*
+
+## Documentation Structure
+
+This project maintains bilingual documentation in Spanish and English to serve the Colombian public sector and international stakeholders:
+
+### Languages / Idiomas
+- **🇪🇸 Español**: Primary language for Colombian governmental compliance and local implementation
+- **🇺🇸 English**: Secondary language for international collaboration and technical standards
+
+### Module Documentation
+Each module contains documentation in both languages:
+```
+📁 [module-name]/
+├── 📄 README.md (bilingual overview)
+├── 📁 es/ (Spanish documentation)
+│   └── 📄 [detailed-docs].md
+└── 📁 en/ (English documentation)
+    └── 📄 [detailed-docs].md
+```
+
+### Current Modules with Documentation
+- **[Configuration Module](./01%20-%20configuration/)**: Coding structure system documentation available in both languages
 
 ## Contributing
 
