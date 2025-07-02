@@ -29,19 +29,39 @@
 
 ---
 
+### 02 - Budget Module / Módulo de Presupuesto
+**Status**: 🚧 In Development / En Desarrollo
+
+**Overview**: Complete budget lifecycle management for governmental entities  
+**Descripción**: Gestión completa del ciclo de vida presupuestario para entidades gubernamentales
+
+**Documentation / Documentación**:
+- **Module README**: [02 - budget/README.md](./02%20-%20budget/README.md) 🇪🇸🇺🇸
+- **🇪🇸 Spanish**: [Documentación del Módulo de Presupuesto](./02%20-%20budget/es/DOCUMENTACION_MODULO_PRESUPUESTO.md)
+- **🇺🇸 English**: [Budget Module Documentation](./02%20-%20budget/en/BUDGET_MODULE_DOCUMENTATION.md)
+
+**Key Features / Características Principales**:
+- Budget document management / Gestión de documentos presupuestales
+- Movement tracking / Seguimiento de movimientos
+- Code integration / Integración con códigos
+- Real-time availability / Disponibilidad en tiempo real
+- Colombian regulatory compliance / Cumplimiento regulatorio colombiano
+
+---
+
 ### Upcoming Modules / Módulos Próximos
 
-#### 02 - Authentication & Authorization / Autenticación y Autorización
+#### 03 - Authentication & Authorization / Autenticación y Autorización
 **Status**: 📋 Planned / Planificado  
 **Description**: User management, RBAC, digital signatures  
 **Descripción**: Gestión de usuarios, RBAC, firmas digitales
 
-#### 03 - Financial Management / Gestión Financiera
+#### 04 - Financial Management / Gestión Financiera
 **Status**: 📋 Planned / Planificado  
 **Description**: General ledger, chart of accounts, transactions  
 **Descripción**: Libro mayor, plan de cuentas, transacciones
 
-#### 04 - Budget Management / Gestión Presupuestaria
+#### 05 - Procurement / Contratación Pública
 **Status**: 📋 Planned / Planificado  
 **Description**: Budget planning, execution, control, modifications  
 **Descripción**: Planificación presupuestaria, ejecución, control, modificaciones

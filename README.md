@@ -133,7 +133,7 @@ The system is primarily designed for:
 ### Core Modules (Planned)
 - **Authentication & Authorization Module**
 - **Financial Management Module**
-- **Budget Management Module**
+- **[Budget Management Module](./02%20-%20budget/)** 🚧 *In Development*
 - **Procurement Module**
 - **Treasury Module**
 - **Reporting Module**
@@ -215,6 +215,7 @@ Each module contains documentation in both languages:
 
 ### Current Modules with Documentation
 - **[Configuration Module](./01%20-%20configuration/)**: Coding structure system documentation available in both languages
+- **[Budget Module](./02%20-%20budget/)**: Complete budget lifecycle management documentation available in both languages
 
 ## Contributing
 
