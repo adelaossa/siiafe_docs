@@ -52,6 +52,10 @@
 - Colombian budget compliance / Cumplimiento presupuestario colombiano
 - **🇺🇸 English**: [Budget Module Documentation](./02%20-%20budget/en/BUDGET_MODULE_DOCUMENTATION.md)
 
+**Practical Examples / Ejemplos Prácticos**:
+- **🇪🇸 Spanish**: [Ejemplo de Flujo Presupuestal Completo](./02%20-%20budget/EJEMPLO_FLUJO_PRESUPUESTAL.md)
+- **🇺🇸 English**: [Complete Budget Flow Example](./02%20-%20budget/BUDGET_FLOW_EXAMPLE.md)
+
 **Key Features / Características Principales**:
 - Budget document management / Gestión de documentos presupuestales
 - Movement tracking / Seguimiento de movimientos

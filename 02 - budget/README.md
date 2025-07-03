@@ -126,3 +126,33 @@ Este módulo es parte del proyecto SIIAFE. Por favor, consulte la documentación
 - **CASOS DE USO**: RP ahora puede incorporar múltiples CDPs, Órdenes de Pago pueden consolidar múltiples RPs
 - **TRAZABILIDAD MEJORADA**: Pista de auditoría completa desde documentos origen hasta egresos finales
 - **FLEXIBILIDAD MEJORADA**: Soporte para escenarios del mundo real donde documentos combinan múltiples fuentes
+
+## Practical Examples / Ejemplos Prácticos
+
+### Complete Budget Flow Example / Ejemplo de Flujo Presupuestal Completo
+
+**English**: [Budget Flow Example](./BUDGET_FLOW_EXAMPLE.md)
+- Step-by-step walkthrough of a complete budget process
+- From code structure setup to final payment and CDP release
+- Detailed SQL examples showing data changes at each step
+- Real-world scenario: Municipal consulting contract for $120M
+
+**Español**: [Ejemplo de Flujo Presupuestal](./EJEMPLO_FLUJO_PRESUPUESTAL.md)
+- Proceso paso a paso de un flujo presupuestal completo
+- Desde la configuración de códigos hasta el pago final y liberación de CDP
+- Ejemplos SQL detallados mostrando cambios de datos en cada paso
+- Escenario real: Contrato de consultoría municipal por $120M
+
+### Key Learning Points / Puntos Clave de Aprendizaje
+
+**English**:
+- How many-to-many relationships work in practice
+- Budget availability calculations and updates
+- Document state transitions and validations
+- Complete traceability from appropriation to payment
+
+**Español**:
+- Cómo funcionan las relaciones muchos-a-muchos en la práctica
+- Cálculos y actualizaciones de disponibilidad presupuestal
+- Transiciones de estado y validaciones de documentos
+- Trazabilidad completa desde la apropiación hasta el pago
