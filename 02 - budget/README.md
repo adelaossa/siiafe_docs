@@ -58,8 +58,10 @@ The Budget Module is built around seven core entities / El Módulo de Presupuest
 3. **Budget Document** (Documento Presupuestal): Main budget document records
 4. **Budget Document Item** (Ítem Documento Presupuestal): Individual items within documents
 5. **Budget Item Coding** (Codificación Ítem Presupuestal): Code assignments to items
-6. **Budget Movement** (Movimiento Presupuestal): Movement transactions between documents
-7. **Movement Item Detail** (Detalle Movimiento Ítem): Item-level movement details
+6. **Budget Document Relation** (Relación Documento Presupuestal): Many-to-many relationships between documents
+7. **Budget Movement** (Movimiento Presupuestal): Movement transactions between documents
+8. **Movement Document Detail** (Detalle Movimiento Documento): Document-level movement details
+9. **Movement Item Detail** (Detalle Movimiento Ítem): Item-level movement details
 
 ## Document Types / Tipos de Documento
 
@@ -106,3 +108,21 @@ Records actual resource outflow / Registra salida efectiva de recursos
 This module is part of the SIIAFE project. Please refer to the main project documentation for contribution guidelines.
 
 Este módulo es parte del proyecto SIIAFE. Por favor, consulte la documentación principal del proyecto para las pautas de contribución.
+
+### Recent Updates / Actualizaciones Recientes
+
+#### Version 1.1 - Many-to-Many Document Relationships / Relaciones Muchos-a-Muchos entre Documentos
+
+**English**: 
+- **CORRECTION**: Replaced single document origin reference with many-to-many relationship model
+- **NEW TABLE**: `BUDGET_DOCUMENT_RELATION` enables complex document relationships
+- **USE CASES**: RP can now incorporate multiple CDPs, Payment Orders can consolidate multiple RPs
+- **ENHANCED TRACEABILITY**: Complete audit trail from source documents to final disbursements
+- **IMPROVED FLEXIBILITY**: Support for real-world scenarios where documents combine multiple sources
+
+**Español**:
+- **CORRECCIÓN**: Reemplazado referencia única de documento origen con modelo de relaciones muchos-a-muchos
+- **NUEVA TABLA**: `RELACION_DOCUMENTO_PRESUPUESTAL` permite relaciones complejas entre documentos
+- **CASOS DE USO**: RP ahora puede incorporar múltiples CDPs, Órdenes de Pago pueden consolidar múltiples RPs
+- **TRAZABILIDAD MEJORADA**: Pista de auditoría completa desde documentos origen hasta egresos finales
+- **FLEXIBILIDAD MEJORADA**: Soporte para escenarios del mundo real donde documentos combinan múltiples fuentes

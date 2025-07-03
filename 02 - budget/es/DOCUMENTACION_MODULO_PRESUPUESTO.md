@@ -126,39 +126,45 @@ Orden de Pago → Autorización → Egreso → Registro Contable
 │ • created_at    │              │            └─────────────────┘
 │ • updated_at    │              │
 └─────────────────┘              │
-                                 ▼
-                       ┌─────────────────┐
-                       │   MOVIMIENTO    │◄┐
-                       │                 │ │
-                       │ • id            │ │
-                       │ • documento_    │ │
-                       │   origen_id     │ │
-                       │ • documento_    │ │
-                       │   destino_id    │ │
-                       │ • tipo_movimiento│ │
-                       │ • valor         │ │
-                       │ • descripcion   │ │
-                       │ • fecha         │ │
-                       │ • usuario_id    │ │
-                       │ • es_activo     │ │
-                       │ • created_at    │ │
-                       │ • updated_at    │ │
-                       └─────────────────┘ │
-                                 │         │
-                                 │         │
-                                 ▼         │
-                       ┌─────────────────┐ │
-                       │ DETALLE_MOV_    │ │
-                       │    ITEM         │ │
-                       │                 │ │
-                       │ • id            │ │
-                       │ • movimiento_id ├─┘
-                       │ • item_origen_id│
-                       │ • item_destino_id│
-                       │ • valor         │
-                       │ • created_at    │
-                       │ • updated_at    │
-                       └─────────────────┘
+                                 │
+                                 │
+  ┌─────────────────────────────────────────────────────────────┐
+  │                                                             │
+  ▼                                                             ▼
+┌─────────────────┐              ┌─────────────────┐    ┌─────────────────┐
+│   RELACION_     │              │   MOVIMIENTO    │    │ DETALLE_MOV_    │◄┐
+│  DOCUMENTO_     │              │                 │    │    ITEM         │ │
+│ PRESUPUESTAL    │              │ • id            │    │                 │ │
+│                 │              │ • numero_mov    │    │ • id            │ │
+│ • id            │              │ • tipo_movimiento│   │ • movimiento_id ├─┘
+│ • documento_    │              │ • valor_total   │    │ • item_origen_id│
+│   origen_id     │              │ • fecha         │    │ • item_destino_id│
+│ • documento_    │              │ • descripcion   │    │ • valor         │
+│   destino_id    │              │ • usuario_id    │    │ • created_at    │
+│ • tipo_relacion │              │ • estado        │    │ • updated_at    │
+│ • valor_relacion│              │ • es_activo     │    └─────────────────┘
+│ • porcentaje    │              │ • created_at    │              │
+│ • metadatos     │              │ • updated_at    │              │
+│ • es_activo     │              └─────────────────┘              │
+│ • created_at    │                                               │
+│ • updated_at    │                                               │
+└─────────────────┘                         ┌─────────────────────┘
+                                           │
+                                           ▼
+                                 ┌─────────────────┐
+                                 │ DETALLE_MOV_    │
+                                 │   DOCUMENTO     │
+                                 │                 │
+                                 │ • id            │
+                                 │ • movimiento_id │
+                                 │ • documento_    │
+                                 │   origen_id     │
+                                 │ • documento_    │
+                                 │   destino_id    │
+                                 │ • valor_documento│
+                                 │ • created_at    │
+                                 │ • updated_at    │
+                                 └─────────────────┘
 ```
 
 ### Definiciones de Tablas
@@ -234,7 +240,7 @@ Almacena la información principal de cada documento presupuestal.
 | valor_total_inicial | DECIMAL(18,2) | Valor total inicial del documento |
 | valor_total_actual | DECIMAL(18,2) | Valor total actual (después de movimientos) |
 | observaciones | TEXT | Observaciones generales del documento |
-| documento_origen_id | UUID/INT | Documento del cual se origina (si aplica) |
+| documento_origen_id | UUID/INT | Documento del cual se origina (si aplica) - **ELIMINADO** |
 | usuario_creacion_id | UUID/INT | Usuario que creó el documento |
 | usuario_aprobacion_id | UUID/INT | Usuario que aprobó el documento |
 | fecha_aprobacion | TIMESTAMP | Fecha de aprobación |
@@ -272,7 +278,58 @@ Almacena las codificaciones aplicadas a cada ítem según la configuración del 
 | creado_en | TIMESTAMP | Marca de tiempo de creación |
 | actualizado_en | TIMESTAMP | Marca de tiempo de última actualización |
 
-#### 6. MOVIMIENTO_PRESUPUESTAL
+#### 6. RELACION_DOCUMENTO_PRESUPUESTAL
+Define las relaciones muchos-a-muchos entre documentos presupuestales. Esta tabla reemplaza el campo `documento_origen_id` para permitir que un documento pueda originarse de múltiples documentos origen.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | UUID/INT | Llave primaria |
+| documento_origen_id | UUID/INT | Llave foránea hacia documento_presupuestal (origen) |
+| documento_destino_id | UUID/INT | Llave foránea hacia documento_presupuestal (destino) |
+| tipo_relacion | VARCHAR(50) | Tipo de relación (INCORPORA, ORIGINA, MODIFICA, ANULA, etc.) |
+| valor_relacion | DECIMAL(18,2) | Valor específico de la relación |
+| porcentaje_relacion | DECIMAL(5,2) | Porcentaje de participación (si aplica) |
+| metadatos_relacion | JSON | Información adicional de la relación |
+| fecha_relacion | DATE | Fecha en que se establece la relación |
+| es_activo | BOOLEAN | Estado activo |
+| creado_en | TIMESTAMP | Marca de tiempo de creación |
+| actualizado_en | TIMESTAMP | Marca de tiempo de última actualización |
+
+**Tipos de Relación**:
+- `INCORPORA`: Un documento incorpora/consolida otro(s) documento(s)
+- `ORIGINA`: Un documento da origen a otro documento
+- `MODIFICA`: Un documento modifica valores de otro documento
+- `ANULA`: Un documento anula parcial o totalmente otro documento
+- `SUSTITUYE`: Un documento sustituye completamente otro documento
+
+**Ejemplos de Casos de Uso**:
+
+1. **RP que incorpora múltiples CDPs**:
+```sql
+-- RP-001 por $100,000,000 incorpora tres CDPs diferentes
+INSERT INTO relacion_documento_presupuestal VALUES 
+(1, 100, 200, 'INCORPORA', 50000000.00, 50.00, '{"concepto": "Consultoría fase 1", "contrato": "CNT-001"}', '2025-03-15', true),
+(2, 101, 200, 'INCORPORA', 30000000.00, 30.00, '{"concepto": "Consultoría fase 2", "contrato": "CNT-001"}', '2025-03-15', true),
+(3, 102, 200, 'INCORPORA', 20000000.00, 20.00, '{"concepto": "Gastos operativos", "contrato": "CNT-001"}', '2025-03-15', true);
+```
+
+2. **OP que incorpora múltiples RPs**:
+```sql
+-- OP-001 para pago de múltiples obligaciones
+INSERT INTO relacion_documento_presupuestal VALUES 
+(4, 200, 300, 'INCORPORA', 75000000.00, 75.00, '{"obligacion": "Pago parcial contrato CNT-001"}', '2025-04-20', true),
+(5, 201, 300, 'INCORPORA', 25000000.00, 25.00, '{"obligacion": "Pago servicios adicionales"}', '2025-04-20', true);
+```
+
+3. **Adición presupuestal que afecta múltiples rubros**:
+```sql
+-- Adición que modifica varios rubros del PG original
+INSERT INTO relacion_documento_presupuestal VALUES 
+(6, 1, 1, 'MODIFICA', 150000000.00, NULL, '{"tipo_modificacion": "ADICION", "acto_admin": "Decreto 001-2025"}', '2025-02-10', true),
+(7, 1, 1, 'MODIFICA', 75000000.00, NULL, '{"tipo_modificacion": "ADICION", "rubro": "220101", "acto_admin": "Decreto 001-2025"}', '2025-02-10', true);
+```
+
+#### 7. MOVIMIENTO_PRESUPUESTAL
 Registra todos los movimientos que afectan los documentos presupuestales.
 
 | Columna | Tipo | Descripción |
@@ -280,8 +337,8 @@ Registra todos los movimientos que afectan los documentos presupuestales.
 | id | UUID/INT | Llave primaria |
 | numero_movimiento | VARCHAR(50) | Número único del movimiento |
 | tipo_movimiento | VARCHAR(50) | Tipo de movimiento (ADICION, REDUCCION, TRASLADO, etc.) |
-| documento_origen_id | UUID/INT | Documento que se ve afectado (reduce valor) |
-| documento_destino_id | UUID/INT | Documento beneficiario (aumenta valor) |
+| documento_origen_id | UUID/INT | Documento que se ve afectado (reduce valor) - **OPCIONAL** |
+| documento_destino_id | UUID/INT | Documento beneficiario (aumenta valor) - **OPCIONAL** |
 | valor_total_movimiento | DECIMAL(18,2) | Valor total del movimiento |
 | fecha_movimiento | DATE | Fecha del movimiento |
 | descripcion_movimiento | TEXT | Descripción del motivo del movimiento |
@@ -293,7 +350,21 @@ Registra todos los movimientos que afectan los documentos presupuestales.
 | creado_en | TIMESTAMP | Marca de tiempo de creación |
 | actualizado_en | TIMESTAMP | Marca de tiempo de última actualización |
 
-#### 7. DETALLE_MOVIMIENTO_ITEM
+#### 8. DETALLE_MOVIMIENTO_DOCUMENTO
+Detalla qué documentos específicos participan en cada movimiento.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | UUID/INT | Llave primaria |
+| movimiento_id | UUID/INT | Llave foránea hacia movimiento_presupuestal |
+| documento_origen_id | UUID/INT | Documento origen específico en el movimiento |
+| documento_destino_id | UUID/INT | Documento destino específico en el movimiento |
+| valor_documento | DECIMAL(18,2) | Valor específico del documento en el movimiento |
+| descripcion_documento | VARCHAR(500) | Descripción específica del documento en el movimiento |
+| creado_en | TIMESTAMP | Marca de tiempo de creación |
+| actualizado_en | TIMESTAMP | Marca de tiempo de última actualización |
+
+#### 9. DETALLE_MOVIMIENTO_ITEM
 Detalla cómo se distribuye cada movimiento entre los ítems específicos.
 
 | Columna | Tipo | Descripción |
@@ -442,6 +513,34 @@ graph TD
 8. Al recibir los servicios, causar la obligación
 9. Generar orden de pago y posteriormente el egreso
 
+### Caso 2.1: RP que Incorpora Múltiples CDPs
+
+**Contexto**: Contrato de consultoría que requiere recursos de diferentes CDPs previamente expedidos.
+
+**Escenario**:
+- CDP-100: $50,000,000 (servicios fase 1)
+- CDP-101: $30,000,000 (servicios fase 2)  
+- CDP-102: $20,000,000 (gastos operativos)
+- **Total RP**: $100,000,000
+
+**Proceso**:
+1. Verificar disponibilidad en los tres CDPs
+2. Crear RP-001 por $100,000,000
+3. Establecer relaciones:
+   - RP-001 ← INCORPORA ← CDP-100 ($50M - 50%)
+   - RP-001 ← INCORPORA ← CDP-101 ($30M - 30%)
+   - RP-001 ← INCORPORA ← CDP-102 ($20M - 20%)
+4. Actualizar estados:
+   - CDP-100, CDP-101, CDP-102 → COMPROMETIDO
+   - RP-001 → EXPEDIDO
+5. Mantener trazabilidad completa de origen de recursos
+
+**Beneficios**:
+- **Flexibilidad**: Permite combinar recursos de diferentes fuentes
+- **Trazabilidad**: Mantiene el origen exacto de cada peso
+- **Control**: Validación de disponibilidad por cada CDP origen
+- **Transparencia**: Auditoría completa de la composición del RP
+
 ### Caso 3: Traslado Presupuestal
 
 **Contexto**: Necesidad de trasladar $50,000,000 entre rubros de funcionamiento.
@@ -454,167 +553,144 @@ graph TD
 5. Autorizar el movimiento
 6. Actualizar automáticamente los saldos de ambos rubros
 
-## Integración con Otros Módulos
+### Caso 3.1: Orden de Pago Múltiple
 
-### Módulo de Configuración
-- **Utiliza**: Estructura de códigos para clasificar documentos e ítems
-- **Depende**: Configuraciones de ámbitos, tipos de código y relaciones
-- **Valida**: Coherencia de codificaciones según reglas definidas
+**Contexto**: Pago mensual que consolida múltiples obligaciones del mismo contratista.
 
-### Módulo de Contratación (Futuro)
-- **Provee**: CDP como requisito para procesos de selección
-- **Recibe**: Información de adjudicaciones para generar RP
-- **Sincroniza**: Estados de documentos con etapas contractuales
+**Escenario**:
+- RP-200: $40,000,000 (servicios enero)
+- RP-201: $35,000,000 (servicios febrero)
+- RP-202: $25,000,000 (servicios marzo)
+- **Total OP**: $100,000,000
 
-### Módulo de Tesorería (Futuro)
-- **Provee**: Órdenes de pago para gestión del flujo de caja
-- **Recibe**: Confirmación de pagos para actualizar estados
-- **Sincroniza**: Egresos con movimientos bancarios
+**Proceso**:
+1. Validar que todos los RPs estén en estado OBLIGADO
+2. Crear OP-300 por $100,000,000
+3. Establecer relaciones:
+   - OP-300 ← INCORPORA ← RP-200 ($40M - 40%)
+   - OP-300 ← INCORPORA ← RP-201 ($35M - 35%)
+   - OP-300 ← INCORPORA ← RP-202 ($25M - 25%)
+4. Generar un solo comprobante de egreso
+5. Mantener trazabilidad hacia CDPs originales
 
-### Módulo de Contabilidad (Futuro)
-- **Provee**: Información para registros contables
-- **Sincroniza**: Documentos presupuestales con asientos contables
-- **Valida**: Coherencia entre ejecución presupuestal y contable
+### Caso 3.2: Modificación Presupuestal Compleja
 
-## Consideraciones de Implementación
+**Contexto**: Decreto de adición presupuestal que afecta múltiples sectores.
 
-### Base de Datos
+**Escenario**:
+- Adición total: $500,000,000
+- Distribuido en: Salud ($200M), Educación ($180M), Infraestructura ($120M)
+- Fuente: Recursos del crédito internacional
 
-**Índices Críticos**:
+**Proceso**:
+1. Crear documento PG-ADD-001 por $500,000,000
+2. Establecer relaciones con PG original:
+   - PG-001 ← MODIFICA ← PG-ADD-001 (Sector Salud - $200M)
+   - PG-001 ← MODIFICA ← PG-ADD-001 (Sector Educación - $180M)
+   - PG-001 ← MODIFICA ← PG-ADD-001 (Sector Infraestructura - $120M)
+3. Actualizar saldos disponibles por sector
+4. Generar reportes de impacto por la modificación
+
+### Caso 3.3: Anulación Parcial de Documentos
+
+**Contexto**: CDP expedido por error debe ser anulado parcialmente y reemplazado.
+
+**Escenario**:
+- CDP-150 original: $80,000,000 (error en clasificación)
+- Anular: $30,000,000 (rubro incorrecto)
+- Crear: CDP-151 por $30,000,000 (rubro correcto)
+
+**Proceso**:
+1. Crear CDP-151 por $30,000,000 con clasificación correcta
+2. Establecer relaciones:
+   - CDP-150 ← ANULA ← CDP-151 ($30M parcial)
+   - CDP-151 ← SUSTITUYE ← CDP-150 ($30M)
+3. Actualizar saldos:
+   - CDP-150: $50,000,000 (saldo activo)
+   - CDP-151: $30,000,000 (nuevo)
+4. Mantener auditoría de la corrección
+
+## Consultas de Composición y Trazabilidad
+
+### Consulta 1: Composición de Documento
 ```sql
--- Índices para consultas de disponibilidad
-CREATE INDEX idx_documento_tipo_estado ON documento_presupuestal(tipo_documento_id, estado_actual);
-CREATE INDEX idx_item_documento_valor ON item_documento_presupuestal(documento_id, valor_actual);
-
--- Índices para trazabilidad
-CREATE INDEX idx_movimiento_documentos ON movimiento_presupuestal(documento_origen_id, documento_destino_id);
-CREATE INDEX idx_detalle_movimiento ON detalle_movimiento_item(movimiento_id, item_origen_id);
-
--- Índices para codificación
-CREATE INDEX idx_codificacion_item ON codificacion_item_presupuestal(item_id, tipo_codigo_id);
+-- Obtener la composición completa de un RP
+SELECT 
+    rd.documento_destino_id as rp_id,
+    dd.numero_documento as rp_numero,
+    rd.documento_origen_id as cdp_id,
+    do.numero_documento as cdp_numero,
+    rd.valor_relacion,
+    rd.porcentaje_relacion,
+    rd.metadatos_relacion
+FROM relacion_documento_presupuestal rd
+JOIN documento_presupuestal dd ON rd.documento_destino_id = dd.id
+JOIN documento_presupuestal do ON rd.documento_origen_id = do.id
+WHERE rd.documento_destino_id = :rp_id 
+    AND rd.tipo_relacion = 'INCORPORA'
+    AND rd.es_activo = true;
 ```
 
-**Triggers de Auditoría**:
+### Consulta 2: Trazabilidad Completa
 ```sql
--- Trigger para mantener histórico de cambios en valores
-CREATE TRIGGER trg_audit_documento_valores 
-AFTER UPDATE ON documento_presupuestal
-FOR EACH ROW EXECUTE FUNCTION fn_audit_documento_changes();
+-- Trazabilidad desde PG hasta Egreso
+WITH RECURSIVE trazabilidad AS (
+    -- Caso base: documento inicial
+    SELECT 
+        d.id,
+        d.numero_documento,
+        d.tipo_documento_id,
+        td.codigo as tipo_codigo,
+        d.valor_total_actual,
+        0 as nivel,
+        CAST(d.numero_documento AS VARCHAR(1000)) as ruta
+    FROM documento_presupuestal d
+    JOIN tipo_documento_presupuestal td ON d.tipo_documento_id = td.id
+    WHERE d.id = :documento_inicial_id
+    
+    UNION ALL
+    
+    -- Recursión: documentos relacionados
+    SELECT 
+        dd.id,
+        dd.numero_documento,
+        dd.tipo_documento_id,
+        td.codigo as tipo_codigo,
+        dd.valor_total_actual,
+        t.nivel + 1,
+        t.ruta || ' → ' || dd.numero_documento
+    FROM trazabilidad t
+    JOIN relacion_documento_presupuestal rd ON t.id = rd.documento_origen_id
+    JOIN documento_presupuestal dd ON rd.documento_destino_id = dd.id
+    JOIN tipo_documento_presupuestal td ON dd.tipo_documento_id = td.id
+    WHERE rd.es_activo = true
+)
+SELECT * FROM trazabilidad ORDER BY nivel, numero_documento;
 ```
 
-### API Design
-
-**Endpoints RESTful**:
-```typescript
-// Gestión de documentos
-GET /api/budget/documents/:type/:status
-POST /api/budget/documents
-PUT /api/budget/documents/:id
-DELETE /api/budget/documents/:id
-
-// Gestión de ítems
-GET /api/budget/documents/:docId/items
-POST /api/budget/documents/:docId/items
-PUT /api/budget/items/:id
-
-// Movimientos
-POST /api/budget/movements
-GET /api/budget/movements/:docId
-PUT /api/budget/movements/:id/approve
-
-// Consultas de disponibilidad
-GET /api/budget/availability/:codes
-POST /api/budget/availability/validate
+### Consulta 3: Disponibilidad con Composición
+```sql
+-- Disponibilidad considerando todas las relaciones
+SELECT 
+    d.id,
+    d.numero_documento,
+    d.valor_total_actual,
+    COALESCE(comprometido.total, 0) as valor_comprometido,
+    d.valor_total_actual - COALESCE(comprometido.total, 0) as saldo_disponible
+FROM documento_presupuestal d
+LEFT JOIN (
+    SELECT 
+        rd.documento_origen_id,
+        SUM(rd.valor_relacion) as total
+    FROM relacion_documento_presupuestal rd
+    JOIN documento_presupuestal dd ON rd.documento_destino_id = dd.id
+    WHERE rd.tipo_relacion = 'INCORPORA' 
+        AND rd.es_activo = true
+        AND dd.estado_actual NOT IN ('ANULADO', 'LIBERADO')
+    GROUP BY rd.documento_origen_id
+) comprometido ON d.id = comprometido.documento_origen_id
+WHERE d.tipo_documento_id = (SELECT id FROM tipo_documento_presupuestal WHERE codigo = 'CDP')
+    AND d.es_activo = true;
 ```
 
-### Validaciones en Tiempo Real
-
-**Validación de Disponibilidad**:
-```typescript
-interface AvailabilityCheck {
-  codigoRubro: string;
-  fuenteFinanciacion: string;
-  valorSolicitud: number;
-  fechaVigencia: Date;
-}
-
-interface AvailabilityResponse {
-  disponible: boolean;
-  saldoActual: number;
-  saldoComprometido: number;
-  saldoDisponible: number;
-  restricciones?: string[];
-}
-```
-
-**Validación de Codificaciones**:
-```typescript
-interface CodificationValidation {
-  tipoDocumento: string;
-  codificaciones: {
-    tipoCodigoId: string;
-    codigoId: string;
-  }[];
-}
-
-interface ValidationResult {
-  valido: boolean;
-  errores: ValidationError[];
-  advertencias: ValidationWarning[];
-}
-```
-
-## Reportes y Consultas Estándar
-
-### 1. Ejecución Presupuestal
-**Descripción**: Estado de ejecución por rubro, sector, programa, etc.
-**Campos**: Apropiación, CDP, RP, Pagos, Saldo por Comprometer, Saldo por Obligar
-
-### 2. Disponibilidad Presupuestal
-**Descripción**: Consulta en tiempo real de disponibilidades por clasificación
-**Filtros**: Por rubro, sector, fuente, período
-
-### 3. Trazabilidad de Documentos
-**Descripción**: Seguimiento completo del flujo de un documento específico
-**Incluye**: Documento origen, movimientos aplicados, documentos derivados
-
-### 4. Movimientos Presupuestales
-**Descripción**: Histórico de todos los movimientos por período
-**Agrupaciones**: Por tipo de movimiento, usuario, fecha
-
-## Cumplimiento Normativo Colombiano
-
-### Estatuto Orgánico de Presupuesto
-- **Artículo 70**: Certificado de Disponibilidad Presupuestal
-- **Artículo 71**: Registro Presupuestal
-- **Artículo 72**: Constitución de reservas presupuestales
-
-### Decreto 1068 de 2015
-- **Capítulo 2**: Ejecución del presupuesto
-- **Capítulo 3**: Modificaciones presupuestales
-
-### Contaduría General de la Nación
-- **Resolución 533 de 2015**: Marco normativo contable
-- **Manual de Procedimientos**: Ejecución presupuestal
-
-## Mejoras Futuras
-
-### Fase 1 (Corto Plazo)
-1. **Workflow Engine**: Motor de aprobaciones configurable
-2. **Notificaciones**: Alertas automáticas por vencimientos y estados
-3. **Dashboard**: Indicadores en tiempo real de ejecución presupuestal
-
-### Fase 2 (Mediano Plazo)
-1. **Análisis Predictivo**: Proyecciones de ejecución basadas en históricos
-2. **Integración Bancaria**: Conexión directa con entidades financieras
-3. **Firma Digital**: Integración con plataformas de firma electrónica
-
-### Fase 3 (Largo Plazo)
-1. **Inteligencia Artificial**: Detección de patrones anómalos en ejecución
-2. **Blockchain**: Trazabilidad inmutable de transacciones críticas
-3. **API Gateway**: Integración con sistemas externos (SECOP, SIIF, etc.)
-
-### Módulos de Análisis
-1. **Business Intelligence**: Cubos OLAP para análisis multidimensional
-2. **Reportería Avanzada**: Generador de reportes personalizables
-3. **Auditoría Continua**: Monitoreo automático de cumplimiento normativo
+// ...existing code...

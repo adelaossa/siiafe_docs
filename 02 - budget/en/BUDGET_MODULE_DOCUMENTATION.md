@@ -114,6 +114,71 @@ Payment Order → Authorization → Disbursement → Accounting Record
           │                      │                      │
           ▼                      │                      ▼
 ┌─────────────────┐              │            ┌─────────────────┐
+│ CODE_CONFIG_    │              │            │ ITEM_CODING     │
+│ DOCUMENT_TYPE   │              │            │                 │
+│                 │              │            │ • id            │
+│ • id            │              │            │ • item_id       │
+│ • doc_type_id   │              │            │ • code_type_id  │
+│ • code_type_id  │              │            │ • code_id       │
+│ • is_mandatory  │              │            │ • created_at    │
+│ • capture_order │              │            │ • updated_at    │
+│ • is_active     │              │            └─────────────────┘
+│ • created_at    │              │
+│ • updated_at    │              │
+└─────────────────┘              │
+                                 │
+                                 │
+  ┌─────────────────────────────────────────────────────────────┐
+  │                                                             │
+  ▼                                                             ▼
+┌─────────────────┐              ┌─────────────────┐    ┌─────────────────┐
+│   BUDGET_       │              │   MOVEMENT      │    │ MOVEMENT_ITEM_  │◄┐
+│  DOCUMENT_      │              │                 │    │    DETAIL       │ │
+│  RELATION       │              │ • id            │    │                 │ │
+│                 │              │ • number        │    │ • id            │ │
+│ • id            │              │ • type          │    │ • movement_id   ├─┘
+│ • origin_doc_id │              │ • total_value   │    │ • origin_item_id│
+│ • target_doc_id │              │ • date          │    │ • target_item_id│
+│ • relation_type │              │ • description   │    │ • value         │
+│ • relation_value│              │ • user_id       │    │ • created_at    │
+│ • percentage    │              │ • state         │    │ • updated_at    │
+│ • metadata      │              │ • is_active     │    └─────────────────┘
+│ • is_active     │              │ • created_at    │              │
+│ • created_at    │              │ • updated_at    │              │
+│ • updated_at    │              └─────────────────┘              │
+└─────────────────┘                                               │
+                                                                  │
+                                         ┌─────────────────────────┘
+                                         │
+                                         ▼
+                                 ┌─────────────────┐
+                                 │ MOVEMENT_DOC_   │
+                                 │    DETAIL       │
+                                 │                 │
+                                 │ • id            │
+                                 │ • movement_id   │
+                                 │ • origin_doc_id │
+                                 │ • target_doc_id │
+                                 │ • doc_value     │
+                                 │ • created_at    │
+                                 │ • updated_at    │
+                                 └─────────────────┘
+│ • code          │    │ • id            │    │ • id            │
+│ • name          │    │ • doc_type_id   │    │ • document_id   │
+│ • description   │    │ • number        │    │ • item_number   │
+│ • state_flow    │    │ • date          │    │ • description   │
+│ • is_active     │    │ • state         │    │ • initial_value │
+│ • created_at    │    │ • total_value   │    │ • current_value │
+│ • updated_at    │    │ • current_value │    │ • is_active     │
+└─────────────────┘    │ • observations  │    │ • created_at    │
+          │            │ • user_id       │    │ • updated_at    │
+          │            │ • is_active     │    └─────────┬───────┘
+          │            │ • created_at    │              │
+          │            │ • updated_at    │              │
+          │            └─────────┬───────┘              │
+          │                      │                      │
+          ▼                      │                      ▼
+┌─────────────────┐              │            ┌─────────────────┐
 │ CODE_CONFIG_    │              │            │  ITEM_CODING    │
 │ DOCUMENT_TYPE   │              │            │                 │
 │                 │              │            │ • id            │
@@ -126,37 +191,41 @@ Payment Order → Authorization → Disbursement → Accounting Record
 │ • created_at    │              │
 │ • updated_at    │              │
 └─────────────────┘              │
-                                 ▼
-                       ┌─────────────────┐
-                       │    MOVEMENT     │◄┐
-                       │                 │ │
-                       │ • id            │ │
-                       │ • source_doc_id │ │
-                       │ • target_doc_id │ │
-                       │ • movement_type │ │
-                       │ • value         │ │
-                       │ • description   │ │
-                       │ • date          │ │
-                       │ • user_id       │ │
-                       │ • is_active     │ │
-                       │ • created_at    │ │
-                       │ • updated_at    │ │
-                       └─────────────────┘ │
-                                 │         │
-                                 │         │
-                                 ▼         │
-                       ┌─────────────────┐ │
-                       │ MOVEMENT_ITEM_  │ │
-                       │    DETAIL       │ │
-                       │                 │ │
-                       │ • id            │ │
-                       │ • movement_id   ├─┘
-                       │ • source_item_id│
-                       │ • target_item_id│
-                       │ • value         │
-                       │ • created_at    │
-                       │ • updated_at    │
-                       └─────────────────┘
+                                 │
+        ┌────────────────────────┴────────────────────────┐
+        │                                                 │
+        ▼                                                 ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  DOCUMENT_      │    │    MOVEMENT     │    │ MOVEMENT_ITEM_  │◄┐
+│  RELATION       │    │                 │    │    DETAIL       │ │
+│                 │    │ • id            │    │                 │ │
+│ • id            │    │ • number        │    │ • id            │ │
+│ • source_doc_id │    │ • movement_type │    │ • movement_id   ├─┘
+│ • target_doc_id │    │ • total_value   │    │ • source_item_id│
+│ • relation_type │    │ • date          │    │ • target_item_id│
+│ • relation_value│    │ • description   │    │ • value         │
+│ • metadata      │    │ • user_id       │    │ • created_at    │
+│ • is_active     │    │ • state         │    │ • updated_at    │
+│ • created_at    │    │ • is_active     │    └─────────────────┘
+│ • updated_at    │    │ • created_at    │              │
+└─────────────────┘    │ • updated_at    │              │
+                       └─────────────────┘              │
+                                                        │
+                                         ┌──────────────┘
+                                         │
+                                         ▼
+                               ┌─────────────────┐
+                               │ MOVEMENT_DOC_   │
+                               │    DETAIL       │
+                               │                 │
+                               │ • id            │
+                               │ • movement_id   │
+                               │ • source_doc_id │
+                               │ • target_doc_id │
+                               │ • doc_value     │
+                               │ • created_at    │
+                               │ • updated_at    │
+                               └─────────────────┘
 ```
 
 ### Table Definitions
@@ -232,7 +301,7 @@ Stores the main information of each budget document.
 | initial_total_value | DECIMAL(18,2) | Initial total value of document |
 | current_total_value | DECIMAL(18,2) | Current total value (after movements) |
 | observations | TEXT | General document observations |
-| source_document_id | UUID/INT | Document from which it originates (if applicable) |
+| source_document_id | UUID/INT | Document from which it originates (if applicable) - **REMOVED** |
 | creation_user_id | UUID/INT | User who created the document |
 | approval_user_id | UUID/INT | User who approved the document |
 | approval_date | TIMESTAMP | Approval date |
@@ -270,7 +339,77 @@ Stores codings applied to each item according to document type configuration.
 | created_at | TIMESTAMP | Creation timestamp |
 | updated_at | TIMESTAMP | Last update timestamp |
 
-#### 6. BUDGET_MOVEMENT
+#### 6. BUDGET_DOCUMENT_RELATION
+Defines many-to-many relationships between budget documents. This table replaces the `source_document_id` field to allow a document to originate from multiple source documents.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID/INT | Primary key |
+| source_document_id | UUID/INT | Foreign key to budget_document (source) |
+| target_document_id | UUID/INT | Foreign key to budget_document (target) |
+| relation_type | VARCHAR(50) | Type of relationship (INCORPORATES, ORIGINATES, MODIFIES, CANCELS, etc.) |
+| relation_value | DECIMAL(18,2) | Specific value of the relationship |
+| relation_percentage | DECIMAL(5,2) | Percentage of participation (if applicable) |
+| relation_metadata | JSON | Additional relationship information |
+| relation_date | DATE | Date when relationship is established |
+| is_active | BOOLEAN | Active status |
+| created_at | TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | Last update timestamp |
+
+**Relationship Types**:
+- `INCORPORATES`: One document incorporates/consolidates other document(s)
+- `ORIGINATES`: One document gives origin to another document
+- `MODIFIES`: One document modifies values of another document
+- `CANCELS`: One document cancels partially or totally another document
+- `REPLACES`: One document completely replaces another document
+
+**Use Case Examples**:
+
+1. **RP incorporating multiple CDPs**:
+```sql
+-- RP-001 for $100,000,000 incorporates three different CDPs
+INSERT INTO budget_document_relation VALUES 
+(1, 100, 200, 'INCORPORATES', 50000000.00, 50.00, '{"concept": "Consultancy phase 1", "contract": "CNT-001"}', '2025-03-15', true),
+(2, 101, 200, 'INCORPORATES', 30000000.00, 30.00, '{"concept": "Consultancy phase 2", "contract": "CNT-001"}', '2025-03-15', true),
+(3, 102, 200, 'INCORPORATES', 20000000.00, 20.00, '{"concept": "Operating expenses", "contract": "CNT-001"}', '2025-03-15', true);
+```
+
+2. **Payment Order incorporating multiple RPs**:
+```sql
+-- OP-001 for payment of multiple obligations
+INSERT INTO budget_document_relation VALUES 
+(4, 200, 300, 'INCORPORATES', 75000000.00, 75.00, '{"obligation": "Partial payment contract CNT-001"}', '2025-04-20', true),
+(5, 201, 300, 'INCORPORATES', 25000000.00, 25.00, '{"obligation": "Payment additional services"}', '2025-04-20', true);
+```
+
+3. **Budget addition affecting multiple items**:
+```sql
+-- Addition modifying various items of original PG
+INSERT INTO budget_document_relation VALUES 
+(6, 1, 1, 'MODIFIES', 150000000.00, NULL, '{"modification_type": "ADDITION", "admin_act": "Decree 001-2025"}', '2025-02-10', true),
+(7, 1, 1, 'MODIFIES', 75000000.00, NULL, '{"modification_type": "ADDITION", "item": "220101", "admin_act": "Decree 001-2025"}', '2025-02-10', true);
+```
+| relation_value | DECIMAL(18,2) | Specific value of the relation |
+| relation_percentage | DECIMAL(5,2) | Participation percentage (if applicable) |
+| relation_metadata | JSON | Additional relation information |
+| relation_date | DATE | Date when relation is established |
+| is_active | BOOLEAN | Active status |
+| created_at | TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | Last update timestamp |
+
+**Example Records**:
+```sql
+-- RP incorporating multiple CDPs
+INSERT INTO budget_document_relation VALUES 
+-- RP-001 incorporates CDP-100 for $50,000,000 (50% of RP)
+(1, 100, 200, 'INCORPORATES', 50000000.00, 50.00, '{"concept": "Consulting services phase 1"}', '2025-03-15', true),
+-- RP-001 incorporates CDP-101 for $30,000,000 (30% of RP)
+(2, 101, 200, 'INCORPORATES', 30000000.00, 30.00, '{"concept": "Consulting services phase 2"}', '2025-03-15', true),
+-- RP-001 incorporates CDP-102 for $20,000,000 (20% of RP)
+(3, 102, 200, 'INCORPORATES', 20000000.00, 20.00, '{"concept": "Operational expenses"}', '2025-03-15', true);
+```
+
+#### 7. BUDGET_MOVEMENT
 Records all movements that affect budget documents.
 
 | Column | Type | Description |
@@ -278,8 +417,8 @@ Records all movements that affect budget documents.
 | id | UUID/INT | Primary key |
 | movement_number | VARCHAR(50) | Unique movement number |
 | movement_type | VARCHAR(50) | Movement type (ADDITION, REDUCTION, TRANSFER, etc.) |
-| source_document_id | UUID/INT | Document that is affected (reduces value) |
-| target_document_id | UUID/INT | Beneficiary document (increases value) |
+| source_document_id | UUID/INT | Document that is affected (reduces value) - **OPTIONAL** |
+| target_document_id | UUID/INT | Beneficiary document (increases value) - **OPTIONAL** |
 | total_movement_value | DECIMAL(18,2) | Total movement value |
 | movement_date | DATE | Movement date |
 | movement_description | TEXT | Description of movement reason |
@@ -291,7 +430,21 @@ Records all movements that affect budget documents.
 | created_at | TIMESTAMP | Creation timestamp |
 | updated_at | TIMESTAMP | Last update timestamp |
 
-#### 7. MOVEMENT_ITEM_DETAIL
+#### 8. MOVEMENT_DOCUMENT_DETAIL
+Details which specific documents participate in each movement.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID/INT | Primary key |
+| movement_id | UUID/INT | Foreign key to budget_movement |
+| source_document_id | UUID/INT | Specific source document in movement |
+| target_document_id | UUID/INT | Specific target document in movement |
+| document_value | DECIMAL(18,2) | Specific document value in movement |
+| document_description | VARCHAR(500) | Specific document description in movement |
+| created_at | TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | Last update timestamp |
+
+#### 9. MOVEMENT_ITEM_DETAIL
 Details how each movement is distributed among specific items.
 
 | Column | Type | Description |
@@ -440,17 +593,171 @@ graph TD
 8. Upon receiving services, accrue obligation
 9. Generate payment order and subsequently disbursement
 
-### Case 3: Budget Transfer
+### Case 2.1: RP Incorporating Multiple CDPs
 
-**Context**: Need to transfer $50,000,000 between operational items.
+**Context**: Consulting contract requiring resources from different previously issued CDPs.
+
+**Scenario**:
+- CDP-100: $50,000,000 (phase 1 services)
+- CDP-101: $30,000,000 (phase 2 services)  
+- CDP-102: $20,000,000 (operating expenses)
+- **Total RP**: $100,000,000
 
 **Process**:
-1. Identify source item with sufficient balance
-2. Create TRANSFER type movement
-3. Specify source and target items with respective values
-4. Validate coding compatibility
-5. Authorize movement
-6. Automatically update both items' balances
+1. Verify availability in all three CDPs
+2. Create RP-001 for $100,000,000
+3. Establish relationships:
+   - RP-001 ← INCORPORATES ← CDP-100 ($50M - 50%)
+   - RP-001 ← INCORPORATES ← CDP-101 ($30M - 30%)
+   - RP-001 ← INCORPORATES ← CDP-102 ($20M - 20%)
+4. Update states:
+   - CDP-100, CDP-101, CDP-102 → COMMITTED
+   - RP-001 → ISSUED
+5. Maintain complete resource origin traceability
+
+**Benefits**:
+- **Flexibility**: Allows combining resources from different sources
+- **Traceability**: Maintains exact origin of every peso
+- **Control**: Availability validation per source CDP
+- **Transparency**: Complete audit of RP composition
+
+### Case 2.2: Multiple Payment Order
+
+**Context**: Monthly payment consolidating multiple obligations from same contractor.
+
+**Scenario**:
+- RP-200: $40,000,000 (January services)
+- RP-201: $35,000,000 (February services)
+- RP-202: $25,000,000 (March services)
+- **Total OP**: $100,000,000
+
+**Process**:
+1. Validate that all RPs are in OBLIGATED state
+2. Create OP-300 for $100,000,000
+3. Establish relationships:
+   - OP-300 ← INCORPORATES ← RP-200 ($40M - 40%)
+   - OP-300 ← INCORPORATES ← RP-201 ($35M - 35%)
+   - OP-300 ← INCORPORATES ← RP-202 ($25M - 25%)
+4. Generate single disbursement voucher
+5. Maintain traceability to original CDPs
+
+### Case 2.3: Complex Budget Modification
+
+**Context**: Budget addition decree affecting multiple sectors.
+
+**Scenario**:
+- Total addition: $500,000,000
+- Distributed in: Health ($200M), Education ($180M), Infrastructure ($120M)
+- Source: International credit resources
+
+**Process**:
+1. Create document PG-ADD-001 for $500,000,000
+2. Establish relationships with original PG:
+   - PG-001 ← MODIFIES ← PG-ADD-001 (Health Sector - $200M)
+   - PG-001 ← MODIFIES ← PG-ADD-001 (Education Sector - $180M)
+   - PG-001 ← MODIFIES ← PG-ADD-001 (Infrastructure Sector - $120M)
+3. Update available balances per sector
+4. Generate impact reports for the modification
+
+### Case 2.4: Partial Document Cancellation
+
+**Context**: CDP issued in error must be partially cancelled and replaced.
+
+**Scenario**:
+- Original CDP-150: $80,000,000 (error in classification)
+- Cancel: $30,000,000 (incorrect item)
+- Create: CDP-151 for $30,000,000 (correct item)
+
+**Process**:
+1. Create CDP-151 for $30,000,000 with correct classification
+2. Establish relationships:
+   - CDP-150 ← CANCELS ← CDP-151 ($30M partial)
+   - CDP-151 ← REPLACES ← CDP-150 ($30M)
+3. Update balances:
+   - CDP-150: $50,000,000 (active balance)
+   - CDP-151: $30,000,000 (new)
+4. Maintain audit of the correction
+
+## Composition and Traceability Queries
+
+### Query 1: Document Composition
+```sql
+-- Get complete composition of an RP
+SELECT 
+    bd.target_document_id as rp_id,
+    td.document_number as rp_number,
+    bd.source_document_id as cdp_id,
+    sd.document_number as cdp_number,
+    bd.relation_value,
+    bd.relation_percentage,
+    bd.relation_metadata
+FROM budget_document_relation bd
+JOIN budget_document td ON bd.target_document_id = td.id
+JOIN budget_document sd ON bd.source_document_id = sd.id
+WHERE bd.target_document_id = :rp_id 
+    AND bd.relation_type = 'INCORPORATES'
+    AND bd.is_active = true;
+```
+### Query 2: Complete Traceability
+```sql
+-- Traceability from PG to Disbursement
+WITH RECURSIVE traceability AS (
+    -- Base case: initial document
+    SELECT 
+        d.id,
+        d.document_number,
+        d.document_type_id,
+        dt.code as type_code,
+        d.current_total_value,
+        0 as level,
+        CAST(d.document_number AS VARCHAR(1000)) as path
+    FROM budget_document d
+    JOIN budget_document_type dt ON d.document_type_id = dt.id
+    WHERE d.id = :initial_document_id
+    
+    UNION ALL
+    
+    -- Recursion: related documents
+    SELECT 
+        td.id,
+        td.document_number,
+        td.document_type_id,
+        dt.code as type_code,
+        td.current_total_value,
+        t.level + 1,
+        t.path || ' → ' || td.document_number
+    FROM traceability t
+    JOIN budget_document_relation bd ON t.id = bd.source_document_id
+    JOIN budget_document td ON bd.target_document_id = td.id
+    JOIN budget_document_type dt ON td.document_type_id = dt.id
+    WHERE bd.is_active = true
+)
+SELECT * FROM traceability ORDER BY level, document_number;
+```
+### Query 3: Availability with Composition
+```sql
+-- Availability considering all relationships
+SELECT 
+    d.id,
+    d.document_number,
+    d.current_total_value,
+    COALESCE(committed.total, 0) as committed_value,
+    d.current_total_value - COALESCE(committed.total, 0) as available_balance
+FROM budget_document d
+LEFT JOIN (
+    SELECT 
+        bd.source_document_id,
+        SUM(bd.relation_value) as total
+    FROM budget_document_relation bd
+    JOIN budget_document td ON bd.target_document_id = td.id
+    WHERE bd.relation_type = 'INCORPORATES' 
+        AND bd.is_active = true
+        AND td.current_state NOT IN ('CANCELLED', 'RELEASED')
+    GROUP BY bd.source_document_id
+) committed ON d.id = committed.source_document_id
+WHERE d.document_type_id = (SELECT id FROM budget_document_type WHERE code = 'CDP')
+    AND d.is_active = true;
+```
 
 ## Integration with Other Modules
 
@@ -484,12 +791,124 @@ graph TD
 CREATE INDEX idx_document_type_state ON budget_document(document_type_id, current_state);
 CREATE INDEX idx_item_document_value ON budget_document_item(document_id, current_value);
 
--- Indexes for traceability
-CREATE INDEX idx_movement_documents ON budget_movement(source_document_id, target_document_id);
-CREATE INDEX idx_detail_movement ON movement_item_detail(movement_id, source_item_id);
+-- Indexes for document relationships
+CREATE INDEX idx_relation_source_document ON budget_document_relation(source_document_id);
+CREATE INDEX idx_relation_target_document ON budget_document_relation(target_document_id);
+CREATE INDEX idx_relation_type ON budget_document_relation(relation_type, is_active);
+
+-- Indexes for movement traceability
+CREATE INDEX idx_movement_documents ON budget_movement(movement_number, current_state);
+CREATE INDEX idx_movement_doc_detail ON movement_document_detail(movement_id, source_document_id);
+CREATE INDEX idx_movement_item_detail ON movement_item_detail(movement_id, source_item_id);
 
 -- Indexes for coding
 CREATE INDEX idx_coding_item ON budget_item_coding(item_id, code_type_id);
+```
+
+**Audit Triggers**:
+```sql
+-- Trigger to maintain value change history
+CREATE TRIGGER trg_audit_document_values 
+AFTER UPDATE ON budget_document
+FOR EACH ROW EXECUTE FUNCTION fn_audit_document_changes();
+```
+
+### API Design
+
+**RESTful Endpoints**:
+```typescript
+// Document management
+GET /api/budget/documents/:type/:status
+POST /api/budget/documents
+PUT /api/budget/documents/:id
+DELETE /api/budget/documents/:id
+
+// Document relationship management
+GET /api/budget/documents/:id/relations
+POST /api/budget/documents/:id/relations
+PUT /api/budget/documents/relations/:relationId
+DELETE /api/budget/documents/relations/:relationId
+
+// Item management
+GET /api/budget/documents/:docId/items
+POST /api/budget/documents/:docId/items
+PUT /api/budget/items/:id
+
+// Movements
+POST /api/budget/movements
+GET /api/budget/movements/:docId
+PUT /api/budget/movements/:id/approve
+
+// Availability queries
+GET /api/budget/availability/:codes
+POST /api/budget/availability/validate
+
+// Document traceability
+GET /api/budget/documents/:id/traceability
+GET /api/budget/documents/:id/composition
+```
+
+### Real-time Validations
+
+**Availability Validation**:
+```typescript
+interface AvailabilityCheck {
+  budgetItem: string;
+  fundingSource: string;
+  requestValue: number;
+  validityDate: Date;
+}
+
+interface AvailabilityResponse {
+  available: boolean;
+  currentBalance: number;
+  committedBalance: number;
+  availableBalance: number;
+  restrictions?: string[];
+}
+```
+
+**Document Relationship Validation**:
+```typescript
+interface DocumentRelationRequest {
+  targetDocumentId: string;
+  sourceDocuments: {
+    documentId: string;
+    relationValue: number;
+    relationPercentage?: number;
+    relationType: string;
+  }[];
+}
+
+interface DocumentRelationValidation {
+  valid: boolean;
+  totalAvailability: number;
+  requestedValue: number;
+  documentDetails: {
+    documentId: string;
+    available: number;
+    requested: number;
+    valid: boolean;
+  }[];
+  errors: ValidationError[];
+}
+```
+
+**Coding Validation**:
+```typescript
+interface CodificationValidation {
+  documentType: string;
+  codings: {
+    codeTypeId: string;
+    codeId: string;
+  }[];
+}
+
+interface ValidationResult {
+  valid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationWarning[];
+}
 ```
 
 **Audit Triggers**:
