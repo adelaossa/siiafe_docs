@@ -131,19 +131,17 @@ INSERT INTO movimiento_tipo_documento_tipo VALUES
 (15, 14, 4, true, NOW(), NOW()); -- VALOR_INICIAL_OP
 ```
 
-### Estructura Actualizada de Movimientos
+### Estructura Actualizada de Movimientos con Contrapartidas
 
 ```sql
--- Tabla movimiento_presupuestal actualizada con referencia al tipo normalizado
--- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, movimiento_relacionado_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
+-- Tabla movimiento_presupuestal actualizada (cabecera del movimiento)
+-- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, valor_total_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
 CREATE TABLE movimiento_presupuestal (
     id SERIAL PRIMARY KEY,
     numero_movimiento VARCHAR(20) NOT NULL UNIQUE,
     movimiento_tipo_id INTEGER NOT NULL REFERENCES movimiento_tipo(id),
     documento_origen_id INTEGER REFERENCES documento_presupuestal(id),
-    documento_afectado_id INTEGER NOT NULL REFERENCES documento_presupuestal(id),
-    movimiento_relacionado_id INTEGER REFERENCES movimiento_presupuestal(id),
-    valor_movimiento DECIMAL(15,2) NOT NULL,
+    valor_total_movimiento DECIMAL(15,2) NOT NULL,
     fecha_movimiento DATE NOT NULL,
     observaciones TEXT,
     documento_soporte VARCHAR(100),
@@ -154,6 +152,85 @@ CREATE TABLE movimiento_presupuestal (
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Tabla detalle_movimiento_presupuestal actualizada (líneas del movimiento)
+-- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
+CREATE TABLE detalle_movimiento_presupuestal (
+    id SERIAL PRIMARY KEY,
+    movimiento_id INTEGER NOT NULL REFERENCES movimiento_presupuestal(id),
+    linea_numero INTEGER NOT NULL,
+    movimiento_tipo_id INTEGER NOT NULL REFERENCES movimiento_tipo(id),
+    documento_afectado_id INTEGER NOT NULL REFERENCES documento_presupuestal(id),
+    valor_linea DECIMAL(15,2) NOT NULL,
+    observaciones_linea TEXT,
+    es_activo BOOLEAN DEFAULT TRUE,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(movimiento_id, linea_numero)
+);
+```
+
+### Función para Crear Movimientos con Contrapartidas Automáticas
+
+```sql
+-- Función que crea automáticamente las contrapartidas al insertar un movimiento
+CREATE OR REPLACE FUNCTION crear_contrapartidas_automaticas()
+RETURNS TRIGGER AS $$
+DECLARE
+    contrapartida RECORD;
+    siguiente_linea INTEGER;
+BEGIN
+    -- Obtener el siguiente número de línea
+    SELECT COALESCE(MAX(linea_numero), 0) + 1
+    INTO siguiente_linea
+    FROM detalle_movimiento_presupuestal
+    WHERE movimiento_id = NEW.movimiento_id;
+    
+    -- Buscar contrapartidas automáticas para este tipo de movimiento
+    FOR contrapartida IN
+        SELECT 
+            mtc.movimiento_tipo_contrapartida_id,
+            mtc.descripcion,
+            mt.efecto
+        FROM movimiento_tipo_contrapartida mtc
+        JOIN movimiento_tipo mt ON mtc.movimiento_tipo_contrapartida_id = mt.id
+        WHERE mtc.movimiento_tipo_principal_id = NEW.movimiento_tipo_id
+          AND mtc.es_automatico = true
+          AND mtc.es_activo = true
+    LOOP
+        -- Determinar el documento afectado por la contrapartida
+        -- (Lógica específica según el tipo de movimiento)
+        INSERT INTO detalle_movimiento_presupuestal (
+            movimiento_id,
+            linea_numero,
+            movimiento_tipo_id,
+            documento_afectado_id,
+            valor_linea,
+            observaciones_linea
+        ) VALUES (
+            NEW.movimiento_id,
+            siguiente_linea,
+            contrapartida.movimiento_tipo_contrapartida_id,
+            -- Aquí se determina el documento afectado según la lógica de negocio
+            CASE 
+                WHEN contrapartida.movimiento_tipo_contrapartida_id = 7 THEN -- AFECTACION_POR_CDP
+                    (SELECT documento_origen_id FROM movimiento_presupuestal WHERE id = NEW.movimiento_id)
+                ELSE NEW.documento_afectado_id
+            END,
+            NEW.valor_linea,
+            'Contrapartida automática: ' || contrapartida.descripcion
+        );
+        
+        siguiente_linea := siguiente_linea + 1;
+    END LOOP;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER crear_contrapartidas_automaticas_trigger
+    AFTER INSERT ON detalle_movimiento_presupuestal
+    FOR EACH ROW EXECUTE FUNCTION crear_contrapartidas_automaticas();
 ```
 
 ### Configuración de Documentos Precedentes
@@ -196,6 +273,42 @@ INSERT INTO documento_tipo_precedente VALUES
 
 -- Nota: Los IDs de tipo_documento se asumen como:
 -- 1 = PG, 2 = CDP, 3 = RP, 4 = OP, 5 = Egreso, 6 = Cuenta por Pagar, 7 = Adición Presupuestal
+```
+
+### Configuración de Contrapartidas de Movimientos
+
+```sql
+-- Tabla que define las contrapartidas automáticas para cada tipo de movimiento
+-- Columnas: id, movimiento_tipo_principal_id, movimiento_tipo_contrapartida_id, orden_ejecucion, es_automatico, descripcion, es_activo, creado_en, actualizado_en
+CREATE TABLE movimiento_tipo_contrapartida (
+    id SERIAL PRIMARY KEY,
+    movimiento_tipo_principal_id INTEGER NOT NULL REFERENCES movimiento_tipo(id),
+    movimiento_tipo_contrapartida_id INTEGER NOT NULL REFERENCES movimiento_tipo(id),
+    orden_ejecucion INTEGER DEFAULT 1,
+    es_automatico BOOLEAN DEFAULT TRUE,
+    descripcion TEXT,
+    es_activo BOOLEAN DEFAULT TRUE,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(movimiento_tipo_principal_id, movimiento_tipo_contrapartida_id)
+);
+
+-- Configuración de contrapartidas automáticas
+INSERT INTO movimiento_tipo_contrapartida VALUES 
+-- VALOR_INICIAL_CDP (8) genera automáticamente AFECTACION_POR_CDP (7)
+(1, 8, 7, 1, true, 'Al crear un CDP, se debe afectar automáticamente el PG', true, NOW(), NOW()),
+
+-- VALOR_INICIAL_RP (11) genera automáticamente REDUCCION_DISPONIBILIDAD (10)
+(2, 11, 10, 1, true, 'Al crear un RP, se debe reducir automáticamente el CDP', true, NOW(), NOW()),
+
+-- VALOR_INICIAL_OP (14) genera automáticamente REDUCCION_COMPROMISO (12)
+(3, 14, 12, 1, true, 'Al crear una OP, se debe reducir automáticamente el RP', true, NOW(), NOW()),
+
+-- LIBERACION_CDP (9) genera automáticamente RESTAURACION_DISPONIBILIDAD (6)
+(4, 9, 6, 1, true, 'Al liberar un CDP, se debe restaurar automáticamente el PG', true, NOW(), NOW()),
+
+-- LIQUIDACION_RP (13) genera automáticamente RESTAURACION_POR_LIQUIDACION_RP (15)
+(5, 13, 15, 1, true, 'Al liquidar un RP, se debe restaurar automáticamente el CDP', true, NOW(), NOW());
 ```
 
 ### Validación de Documentos Precedentes
@@ -396,14 +509,21 @@ INSERT INTO codificacion_item_presupuestal VALUES
 ### 2.5 Movimientos de Apropiación Inicial
 
 ```sql
--- Movimiento de apropiación inicial del presupuesto (usando tipo normalizado)
--- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, movimiento_relacionado_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
+-- Movimiento de apropiación inicial del presupuesto (cabecera)
+-- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, valor_total_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
 INSERT INTO movimiento_presupuestal VALUES 
-(1, 'MOV-2025-001', 1, NULL, 1, NULL, 500000000.00, '2025-01-01', 
+(1, 'MOV-2025-001', 1, NULL, 500000000.00, '2025-01-01', 
  'Apropiación inicial del presupuesto de funcionamiento 2025', 'Acuerdo-001-2025', 2, '2025-01-15 10:00:00', 
  'APROBADO', true, '2025-01-01 08:00:00', '2025-01-15 10:00:00');
+
+-- Detalle del movimiento (línea única para apropiación)
+-- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_presupuestal VALUES 
+(1, 1, 1, 1, 1, 500000000.00, 'Apropiación inicial PG-2025-001', 
+ true, '2025-01-01 08:00:00', '2025-01-15 10:00:00');
  
 -- Nota: movimiento_tipo_id = 1 corresponde a 'APROPIACION_INICIAL' que tiene efecto 'INCREMENTA'
+-- Nota: La apropiación inicial no tiene contrapartida automática
 ```
 
 ### 2.6 Detalle de Movimientos por Ítem
@@ -539,56 +659,65 @@ INSERT INTO codificacion_item_presupuestal VALUES
 (12, 6, 2, 21, '2025-02-15 09:00:00', '2025-02-15 09:00:00'); -- Fuente: SGP
 ```
 
-### 3.6 Movimientos de Afectación del CDP (Dobles)
+### 3.6 Movimientos de Afectación del CDP (Con Contrapartidas Automáticas)
 
 ```sql
--- MOVIMIENTO 1: Reducción en el PG (documento origen)
--- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, movimiento_relacionado_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
+-- MOVIMIENTO ÚNICO: Expedición del CDP con contrapartida automática
+-- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, valor_total_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
 INSERT INTO movimiento_presupuestal VALUES 
-(2, 'MOV-2025-002A', 7, 2, 1, 3, 180000000.00, '2025-02-15', 
- 'Reducción de disponibilidad en PG por expedición CDP-2025-001', 'CDP-2025-001', 3, '2025-02-15 09:00:00', 
+(2, 'MOV-2025-002', 8, 1, 180000000.00, '2025-02-15', 
+ 'Expedición CDP-2025-001 con afectación automática del PG-2025-001', 'CDP-2025-001', 3, '2025-02-15 09:00:00', 
  'APROBADO', true, '2025-02-15 09:00:00', '2025-02-15 09:00:00');
 
--- MOVIMIENTO 2: Incremento en el CDP (documento destino)
--- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, movimiento_relacionado_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
-INSERT INTO movimiento_presupuestal VALUES 
-(3, 'MOV-2025-002B', 8, 2, 2, 2, 180000000.00, '2025-02-15', 
- 'Valor inicial del CDP-2025-001 por afectación desde PG-2025-001', 'CDP-2025-001', 3, '2025-02-15 09:00:00', 
- 'APROBADO', true, '2025-02-15 09:00:00', '2025-02-15 09:00:00');
+-- LÍNEA 1: Incremento en el CDP (movimiento principal)
+-- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_presupuestal VALUES 
+(2, 2, 1, 8, 2, 180000000.00, 'Valor inicial del CDP-2025-001', 
+ true, '2025-02-15 09:00:00', '2025-02-15 09:00:00');
+
+-- LÍNEA 2: Reducción en el PG (contrapartida automática)
+-- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_presupuestal VALUES 
+(3, 2, 2, 7, 1, 180000000.00, 'Contrapartida automática: Afectación del PG-2025-001', 
+ true, '2025-02-15 09:00:00', '2025-02-15 09:00:00');
  
--- Nota: movimiento_tipo_id = 7 corresponde a 'AFECTACION_POR_CDP' que tiene efecto 'REDUCE'
--- Nota: movimiento_tipo_id = 8 corresponde a 'VALOR_INICIAL_CDP' que tiene efecto 'INCREMENTA'
+-- Nota: movimiento_tipo_id = 8 'VALOR_INICIAL_CDP' genera automáticamente tipo_id = 7 'AFECTACION_POR_CDP'
+-- Nota: Un solo movimiento (MOV-2025-002) con dos líneas que afectan documentos diferentes
 ```
 
 ### 3.7 Detalle de Movimientos por Ítem - CDP
 
 ```sql
--- Detalle del movimiento de reducción en PG (MOV-002A)
+-- Detalle por ítem del movimiento CDP (MOV-002)
 -- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
 INSERT INTO detalle_movimiento_item VALUES 
-(5, 2, 1, NULL, 120000000.00, 'Reducción: Servicios Profesionales RP por CDP', 
+-- Ítems afectados del CDP (línea 1 del movimiento)
+(5, 2, 5, 1, 120000000.00, 'CDP Fase 1 desde Servicios Profesionales RP', 
  '2025-02-15 09:00:00', '2025-02-15 09:00:00'),
-(6, 2, 3, NULL, 60000000.00, 'Reducción: Servicios Profesionales SGP por CDP', 
+(6, 2, 6, 3, 60000000.00, 'CDP Fase 2 desde Servicios Profesionales SGP', 
+ '2025-02-15 09:00:00', '2025-02-15 09:00:00'),
+
+-- Ítems afectados del PG (línea 2 del movimiento - contrapartida)
+(7, 2, 1, NULL, 120000000.00, 'Reducción: Servicios Profesionales RP por CDP', 
+ '2025-02-15 09:00:00', '2025-02-15 09:00:00'),
+(8, 2, 3, NULL, 60000000.00, 'Reducción: Servicios Profesionales SGP por CDP', 
  '2025-02-15 09:00:00', '2025-02-15 09:00:00');
 
--- Detalle del movimiento de incremento en CDP (MOV-002B)
--- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
-INSERT INTO detalle_movimiento_item VALUES 
-(7, 3, 5, 1, 120000000.00, 'Incremento: CDP Fase 1 desde Servicios Profesionales RP', 
- '2025-02-15 09:00:00', '2025-02-15 09:00:00'),
-(8, 3, 6, 3, 60000000.00, 'Incremento: CDP Fase 2 desde Servicios Profesionales SGP', 
- '2025-02-15 09:00:00', '2025-02-15 09:00:00');
+-- Nota: Ambas líneas del movimiento comparten el mismo detalle por ítem
+-- Nota: item_destino_id indica el ítem origen cuando es una transferencia
 ```
 
 ### 3.8 Relación CDP with PG
 
 ```sql
--- Relaciones del CDP con el PG
+-- Relaciones del CDP con el PG (movimiento único con contrapartida)
 -- Columnas: id, documento_origen_id, documento_destino_id, tipo_relacion, valor_relacion, porcentaje_relacion, metadatos_relacion, fecha_relacion, es_activo, creado_en, actualizado_en
 INSERT INTO relacion_documento_presupuestal VALUES 
 (1, 1, 2, 'ORIGINA', 180000000.00, 36.00, 
- '{"tipo_operacion": "RESERVA", "conceptos": ["Servicios Profesionales RP", "Servicios Profesionales SGP"], "movimiento_reduccion_id": 2, "movimiento_incremento_id": 3}', 
+ '{"tipo_operacion": "RESERVA", "conceptos": ["Servicios Profesionales RP", "Servicios Profesionales SGP"], "movimiento_id": 2, "lineas": [1, 2]}', 
  '2025-02-15', true, '2025-02-15 09:00:00', '2025-02-15 09:00:00');
+ 
+-- Nota: metadatos_relacion incluye el ID del movimiento único y las líneas que lo componen
 ```
 
 ### 3.9 Estado Después del Paso 3
@@ -705,55 +834,65 @@ INSERT INTO codificacion_item_presupuestal VALUES
 (16, 8, 2, 21, '2025-03-01 10:00:00', '2025-03-01 10:00:00'); -- Fuente: SGP
 ```
 
-### 4.6 Movimientos de Afectación del RP (Dobles)
+### 4.6 Movimientos de Afectación del RP (Con Contrapartidas Automáticas)
 
 ```sql
--- MOVIMIENTO 1: Reducción en el CDP (documento origen)
--- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, movimiento_relacionado_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
+-- MOVIMIENTO ÚNICO: Expedición del RP con contrapartida automática
+-- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, valor_total_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
 INSERT INTO movimiento_presupuestal VALUES 
-(4, 'MOV-2025-003A', 10, 3, 2, 5, 120000000.00, '2025-03-01', 
- 'Reducción de disponibilidad en CDP por expedición RP-2025-001', 'RP-2025-001', 4, '2025-03-01 10:30:00', 
+(3, 'MOV-2025-003', 11, 3, 120000000.00, '2025-03-01', 
+ 'Expedición RP-2025-001 con afectación automática del CDP-2025-001', 'RP-2025-001', 4, '2025-03-01 10:30:00', 
  'APROBADO', true, '2025-03-01 10:00:00', '2025-03-01 10:30:00');
- 
--- Nota: movimiento_tipo_id = 10 corresponde a 'REDUCCION_DISPONIBILIDAD' que tiene efecto 'REDUCE'
 
--- MOVIMIENTO 2: Incremento en el RP (documento destino)
--- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, movimiento_relacionado_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
-INSERT INTO movimiento_presupuestal VALUES 
-(5, 'MOV-2025-003B', 11, 3, 3, 4, 120000000.00, '2025-03-01', 
- 'Valor inicial del RP-2025-001 por afectación desde CDP-2025-001', 'RP-2025-001', 4, '2025-03-01 10:30:00', 
- 'APROBADO', true, '2025-03-01 10:00:00', '2025-03-01 10:30:00');
+-- LÍNEA 1: Incremento en el RP (movimiento principal)
+-- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_presupuestal VALUES 
+(4, 3, 1, 11, 3, 120000000.00, 'Valor inicial del RP-2025-001', 
+ true, '2025-03-01 10:00:00', '2025-03-01 10:30:00');
+
+-- LÍNEA 2: Reducción en el CDP (contrapartida automática)
+-- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_presupuestal VALUES 
+(5, 3, 2, 10, 2, 120000000.00, 'Contrapartida automática: Reducción disponibilidad CDP-2025-001', 
+ true, '2025-03-01 10:00:00', '2025-03-01 10:30:00');
+ 
+-- Nota: movimiento_tipo_id = 11 'VALOR_INICIAL_RP' genera automáticamente tipo_id = 10 'REDUCCION_DISPONIBILIDAD'
+-- Nota: Un solo movimiento (MOV-2025-003) con dos líneas que afectan documentos diferentes
 ```
 
 ### 4.7 Detalle de Movimientos por Ítem - RP
 
 ```sql
--- Detalle del movimiento de reducción en CDP (MOV-003A)
+-- Detalle por ítem del movimiento RP (MOV-003)
 -- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
 INSERT INTO detalle_movimiento_item VALUES 
-(9, 4, 5, NULL, 80000000.00, 'Reducción: CDP Fase 1 por RP', 
+-- Ítems afectados del RP (línea 1 del movimiento)
+(9, 3, 7, 5, 80000000.00, 'RP Recursos Propios desde CDP Fase 1', 
  '2025-03-01 10:00:00', '2025-03-01 10:00:00'),
-(10, 4, 6, NULL, 40000000.00, 'Reducción: CDP Fase 2 por RP', 
+(10, 3, 8, 6, 40000000.00, 'RP SGP desde CDP Fase 2', 
+ '2025-03-01 10:00:00', '2025-03-01 10:00:00'),
+
+-- Ítems afectados del CDP (línea 2 del movimiento - contrapartida)
+(11, 3, 5, NULL, 80000000.00, 'Reducción: CDP Fase 1 por RP', 
+ '2025-03-01 10:00:00', '2025-03-01 10:00:00'),
+(12, 3, 6, NULL, 40000000.00, 'Reducción: CDP Fase 2 por RP', 
  '2025-03-01 10:00:00', '2025-03-01 10:00:00');
 
--- Detalle del movimiento de incremento en RP (MOV-003B)
--- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
-INSERT INTO detalle_movimiento_item VALUES 
-(11, 5, 7, 5, 80000000.00, 'Incremento: RP Recursos Propios desde CDP Fase 1', 
- '2025-03-01 10:00:00', '2025-03-01 10:00:00'),
-(12, 5, 8, 6, 40000000.00, 'Incremento: RP SGP desde CDP Fase 2', 
- '2025-03-01 10:00:00', '2025-03-01 10:00:00');
+-- Nota: Ambas líneas del movimiento comparten el mismo detalle por ítem
+-- Nota: item_destino_id indica el ítem origen cuando es una transferencia
 ```
 
 ### 4.8 Relación RP con CDP
 
 ```sql
--- Relación del RP con el CDP
+-- Relación del RP con el CDP (movimiento único con contrapartida)
 -- Columnas: id, documento_origen_id, documento_destino_id, tipo_relacion, valor_relacion, porcentaje_relacion, metadatos_relacion, fecha_relacion, es_activo, creado_en, actualizado_en
 INSERT INTO relacion_documento_presupuestal VALUES 
 (2, 2, 3, 'INCORPORA', 120000000.00, 66.67, 
- '{"tipo_operacion": "COMPROMISO", "contrato": "CNT-2025-001", "adjudicacion": "2025-02-28", "movimiento_reduccion_id": 4, "movimiento_incremento_id": 5}', 
+ '{"tipo_operacion": "COMPROMISO", "contrato": "CNT-2025-001", "adjudicacion": "2025-02-28", "movimiento_id": 3, "lineas": [1, 2]}', 
  '2025-03-01', true, '2025-03-01 10:00:00', '2025-03-01 10:00:00');
+ 
+-- Nota: metadatos_relacion incluye el ID del movimiento único y las líneas que lo componen
 ```
 
 ### 4.9 Estado Después del Paso 4
@@ -877,56 +1016,65 @@ INSERT INTO codificacion_item_presupuestal VALUES
 (20, 10, 2, 21, '2025-04-15 14:00:00', '2025-04-15 14:00:00'); -- Fuente: SGP
 ```
 
-### 5.6 Movimientos de Afectación de la OP (Dobles)
+### 5.6 Movimientos de Afectación de la OP (Con Contrapartidas Automáticas)
 
 ```sql
--- MOVIMIENTO 1: Reducción en el RP (documento origen)
--- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, movimiento_relacionado_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
+-- MOVIMIENTO ÚNICO: Expedición de la OP con contrapartida automática
+-- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, valor_total_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
 INSERT INTO movimiento_presupuestal VALUES 
-(6, 'MOV-2025-004A', 12, 4, 3, 7, 60000000.00, '2025-04-15', 
- 'Reducción de compromiso en RP por expedición OP-2025-001', 'OP-2025-001', 6, '2025-04-15 14:30:00', 
+(6, 'MOV-2025-004', 14, 4, 60000000.00, '2025-04-15', 
+ 'Expedición OP-2025-001 con afectación automática del RP-2025-001', 'OP-2025-001', 6, '2025-04-15 14:30:00', 
  'APROBADO', true, '2025-04-15 14:00:00', '2025-04-15 14:30:00');
 
--- MOVIMIENTO 2: Incremento en la OP (documento destino)
--- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, movimiento_relacionado_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
-INSERT INTO movimiento_presupuestal VALUES 
-(7, 'MOV-2025-004B', 14, 4, 4, 6, 60000000.00, '2025-04-15', 
- 'Valor inicial de la OP-2025-001 por afectación desde RP-2025-001', 'OP-2025-001', 6, '2025-04-15 14:30:00', 
- 'APROBADO', true, '2025-04-15 14:00:00', '2025-04-15 14:30:00');
+-- LÍNEA 1: Incremento en la OP (movimiento principal)
+-- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_presupuestal VALUES 
+(6, 6, 1, 14, 4, 60000000.00, 'Valor inicial de la OP-2025-001', 
+ true, '2025-04-15 14:00:00', '2025-04-15 14:30:00');
+
+-- LÍNEA 2: Reducción en el RP (contrapartida automática)
+-- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_presupuestal VALUES 
+(7, 6, 2, 12, 3, 60000000.00, 'Contrapartida automática: Reducción compromiso RP-2025-001', 
+ true, '2025-04-15 14:00:00', '2025-04-15 14:30:00');
  
--- Nota: movimiento_tipo_id = 12 corresponde a 'REDUCCION_COMPROMISO' que tiene efecto 'REDUCE'
--- Nota: movimiento_tipo_id = 14 corresponde a 'VALOR_INICIAL_OP' que tiene efecto 'INCREMENTA'
+-- Nota: movimiento_tipo_id = 14 'VALOR_INICIAL_OP' genera automáticamente tipo_id = 12 'REDUCCION_COMPROMISO'
+-- Nota: Un solo movimiento (MOV-2025-004) con dos líneas que afectan documentos diferentes
 ```
 
 ### 5.7 Detalle de Movimientos por Ítem - OP
 
 ```sql
--- Detalle del movimiento de reducción en RP (MOV-004A)
+-- Detalle por ítem del movimiento OP (MOV-004)
 -- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
 INSERT INTO detalle_movimiento_item VALUES 
-(13, 6, 7, NULL, 40000000.00, 'Reducción: RP Recursos Propios por OP', 
+-- Ítems afectados de la OP (línea 1 del movimiento)
+(13, 6, 9, 7, 40000000.00, 'OP Recursos Propios desde RP', 
  '2025-04-15 14:00:00', '2025-04-15 14:00:00'),
-(14, 6, 8, NULL, 20000000.00, 'Reducción: RP SGP por OP', 
+(14, 6, 10, 8, 20000000.00, 'OP SGP desde RP', 
+ '2025-04-15 14:00:00', '2025-04-15 14:00:00'),
+
+-- Ítems afectados del RP (línea 2 del movimiento - contrapartida)
+(15, 6, 7, NULL, 40000000.00, 'Reducción: RP Recursos Propios por OP', 
+ '2025-04-15 14:00:00', '2025-04-15 14:00:00'),
+(16, 6, 8, NULL, 20000000.00, 'Reducción: RP SGP por OP', 
  '2025-04-15 14:00:00', '2025-04-15 14:00:00');
 
--- Detalle del movimiento de incremento en OP (MOV-004B)
--- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
-INSERT INTO detalle_movimiento_item VALUES 
-(15, 7, 9, 7, 40000000.00, 'Incremento: OP Recursos Propios desde RP', 
- '2025-04-15 14:00:00', '2025-04-15 14:00:00'),
-(16, 7, 10, 8, 20000000.00, 'Incremento: OP SGP desde RP', 
- '2025-04-15 14:00:00', '2025-04-15 14:00:00');
+-- Nota: Ambas líneas del movimiento comparten el mismo detalle por ítem
+-- Nota: item_destino_id indica el ítem origen cuando es una transferencia
 ```
 
 ### 5.8 Relación OP con RP
 
 ```sql
--- Relación de la OP con el RP
+-- Relación de la OP con el RP (movimiento único con contrapartida)
 -- Columnas: id, documento_origen_id, documento_destino_id, tipo_relacion, valor_relacion, porcentaje_relacion, metadatos_relacion, fecha_relacion, es_activo, creado_en, actualizado_en
 INSERT INTO relacion_documento_presupuestal VALUES 
 (3, 3, 4, 'INCORPORA', 60000000.00, 50.00, 
- '{"tipo_operacion": "OBLIGACION", "factura": "FC-001", "acta": "AR-001", "movimiento_reduccion_id": 6, "movimiento_incremento_id": 7}', 
+ '{"tipo_operacion": "OBLIGACION", "factura": "FC-001", "acta": "AR-001", "movimiento_id": 6, "lineas": [1, 2]}', 
  '2025-04-15', true, '2025-04-15 14:00:00', '2025-04-15 14:00:00');
+ 
+-- Nota: metadatos_relacion incluye el ID del movimiento único y las líneas que lo componen
 ```
 
 ### 5.9 Estado Después del Paso 5
@@ -994,45 +1142,52 @@ WHERE id = 8; -- Ítem 2 RP
 **Motivo**: El contrato se ejecutó por $120,000,000 pero el CDP era por $180,000,000
 **Saldo a liberar**: $60,000,000 ($40M Recursos Propios + $20M SGP)
 
-### 6.2 Movimientos de Liberación del CDP (Dobles)
+### 6.2 Movimientos de Liberación del CDP (Con Contrapartidas Automáticas)
 
 ```sql
--- MOVIMIENTO 1: Liberación en el CDP (documento origen)
--- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, movimiento_relacionado_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
+-- MOVIMIENTO ÚNICO: Liberación del CDP con contrapartida automática
+-- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, valor_total_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
 INSERT INTO movimiento_presupuestal VALUES 
-(8, 'MOV-2025-005A', 9, NULL, 2, 9, 60000000.00, '2025-05-10', 
- 'Liberación de saldo no ejecutado en CDP-2025-001', 'Memo-001-2025', 6, '2025-05-10 16:00:00', 
+(8, 'MOV-2025-005', 9, NULL, 60000000.00, '2025-05-10', 
+ 'Liberación CDP-2025-001 con restauración automática al PG', 'Memo-001-2025', 6, '2025-05-10 16:00:00', 
  'APROBADO', true, '2025-05-10 15:30:00', '2025-05-10 16:00:00');
 
--- MOVIMIENTO 2: Restauración en el PG (documento destino)
--- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, movimiento_relacionado_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
-INSERT INTO movimiento_presupuestal VALUES 
-(9, 'MOV-2025-005B', 6, NULL, 1, 8, 60000000.00, '2025-05-10', 
- 'Restauración de disponibilidad en PG por liberación CDP-2025-001', 'Memo-001-2025', 6, '2025-05-10 16:00:00', 
- 'APROBADO', true, '2025-05-10 15:30:00', '2025-05-10 16:00:00');
+-- LÍNEA 1: Reducción en el CDP (movimiento principal)
+-- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_presupuestal VALUES 
+(8, 8, 1, 9, 2, 60000000.00, 'Liberación de saldo no ejecutado CDP-2025-001', 
+ true, '2025-05-10 15:30:00', '2025-05-10 16:00:00');
+
+-- LÍNEA 2: Incremento en el PG (contrapartida automática)
+-- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_presupuestal VALUES 
+(9, 8, 2, 6, 1, 60000000.00, 'Contrapartida automática: Restauración disponibilidad PG', 
+ true, '2025-05-10 15:30:00', '2025-05-10 16:00:00');
  
--- Nota: movimiento_tipo_id = 9 corresponde a 'LIBERACION_CDP' que tiene efecto 'REDUCE'
--- Nota: movimiento_tipo_id = 6 corresponde a 'RESTAURACION_DISPONIBILIDAD' que tiene efecto 'INCREMENTA'
+-- Nota: movimiento_tipo_id = 9 'LIBERACION_CDP' genera automáticamente tipo_id = 6 'RESTAURACION_DISPONIBILIDAD'
+-- Nota: Un solo movimiento (MOV-2025-005) con dos líneas que afectan documentos diferentes
 ```
 
 ### 6.3 Detalle de Movimientos de Liberación
 
 ```sql
--- Detalle del movimiento de liberación en CDP (MOV-005A)
+-- Detalle por ítem del movimiento de liberación (MOV-005)
 -- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
 INSERT INTO detalle_movimiento_item VALUES 
+-- Ítems afectados del CDP (línea 1 del movimiento)
 (17, 8, 5, NULL, 40000000.00, 'Liberación: CDP Fase 1', 
  '2025-05-10 15:30:00', '2025-05-10 15:30:00'),
 (18, 8, 6, NULL, 20000000.00, 'Liberación: CDP Fase 2', 
+ '2025-05-10 15:30:00', '2025-05-10 15:30:00'),
+
+-- Ítems afectados del PG (línea 2 del movimiento - contrapartida)
+(19, 8, 1, 5, 40000000.00, 'Restauración: Servicios Profesionales RP desde CDP', 
+ '2025-05-10 15:30:00', '2025-05-10 15:30:00'),
+(20, 8, 3, 6, 20000000.00, 'Restauración: Servicios Profesionales SGP desde CDP', 
  '2025-05-10 15:30:00', '2025-05-10 15:30:00');
 
--- Detalle del movimiento de restauración en PG (MOV-005B)
--- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
-INSERT INTO detalle_movimiento_item VALUES 
-(19, 9, 1, 5, 40000000.00, 'Restauración: Servicios Profesionales RP desde CDP', 
- '2025-05-10 15:30:00', '2025-05-10 15:30:00'),
-(20, 9, 3, 6, 20000000.00, 'Restauración: Servicios Profesionales SGP desde CDP', 
- '2025-05-10 15:30:00', '2025-05-10 15:30:00');
+-- Nota: Ambas líneas del movimiento comparten el mismo detalle por ítem
+-- Nota: item_destino_id indica el ítem origen cuando es una restauración
 ```
 
 ### 6.4 Estado Final Después del Paso 6
@@ -1064,120 +1219,60 @@ WHERE id = 1; -- Servicios Profesionales + Recursos Propios
 -- Columnas en UPDATE: valor_actual, actualizado_en
 UPDATE item_documento_presupuestal SET 
     valor_actual = valor_actual + 20000000.00,  -- $40M + $20M = $60M
-   
     actualizado_en = '2025-05-10 16:00:00'
 WHERE id = 3; -- Servicios Profesionales + SGP
 ```
 
 ---
 
-## CASOS DE USO DE DOCUMENTOS PRECEDENTES
+## DIAGRAMA DE FLUJO CON MOVIMIENTOS ÚNICOS Y CONTRAPARTIDAS AUTOMÁTICAS
 
-### 1. **Precedencia Obligatoria (Flujo Estándar)**
-```sql
--- Caso: Un CDP debe originarse desde un PG
-SELECT 'Válido' as resultado
-FROM documento_tipo_precedente dtp
-WHERE dtp.tipo_documento_id = 2          -- CDP
-  AND dtp.tipo_documento_precedente_id = 1 -- PG
-  AND dtp.es_obligatorio = true;
-
--- Si se intenta crear un CDP sin PG precedente, se rechaza automáticamente
+```
+APROPIACION_INICIAL (MOV-001)
+    ↓ Línea 1: INCREMENTA PG +$500M
+PG-2025-001 ($500M disponible)
+    ↓ 
+MOV-002: EXPEDICION_CDP
+    ├── Línea 1: VALOR_INICIAL_CDP → CDP +$180M
+    └── Línea 2: AFECTACION_POR_CDP → PG -$180M (contrapartida automática)
+    ↓
+CDP-2025-001 ($180M disponible)
+    ↓
+MOV-003: EXPEDICION_RP
+    ├── Línea 1: VALOR_INICIAL_RP → RP +$120M
+    └── Línea 2: REDUCCION_DISPONIBILIDAD → CDP -$120M (contrapartida automática)
+    ↓
+RP-2025-001 ($120M disponible)
+    ├── MOV-004: EXPEDICION_OP
+    │   ├── Línea 1: VALOR_INICIAL_OP → OP +$60M
+    │   └── Línea 2: REDUCCION_COMPROMISO → RP -$60M (contrapartida automática)
+    │   ↓
+    │   OP-2025-001 ($60M disponible)
+    │
+    └── MOV-006: LIQUIDACION_RP
+        ├── Línea 1: LIQUIDACION_RP → RP -$60M
+        └── Línea 2: RESTAURACION_POR_LIQUIDACION_RP → CDP +$60M (contrapartida automática)
+        ↑
+        CDP-2025-001 ($60M restaurado)
+        ↓
+MOV-005: LIBERACION_CDP
+    ├── Línea 1: LIBERACION_CDP → CDP -$60M
+    └── Línea 2: RESTAURACION_DISPONIBILIDAD → PG +$60M (contrapartida automática)
+    ↑
+PG-2025-001 ($440M disponible)
 ```
 
-### 2. **Precedencia Múltiple (Flexibilidad)**
-```sql
--- Caso: Un Egreso puede originarse desde OP o Cuenta por Pagar
-SELECT 
-    td.nombre as precedente_valido,
-    dtp.orden_precedencia,
-    dtp.descripcion
-FROM documento_tipo_precedente dtp
-JOIN tipo_documento td ON dtp.tipo_documento_precedente_id = td.id
-WHERE dtp.tipo_documento_id = 5  -- Egreso
-  AND dtp.es_activo = true
-ORDER BY dtp.orden_precedencia;
+**Ventajas del Nuevo Modelo:**
+- **6 movimientos únicos** en lugar de 10 movimientos separados
+- **Contrapartidas automáticas** garantizan equilibrio
+- **Numeración simplificada** sin sufijos A/B
+- **Atomicidad** de las operaciones presupuestales
 
--- Resultado:
--- precedente_valido | orden_precedencia | descripcion
--- Orden de Pago     | 1                 | Egreso puede originarse desde una OP
--- Cuenta por Pagar  | 2                 | Egreso puede originarse desde Cuenta por Pagar
-```
-
-### 3. **Validación en Tiempo Real**
-```sql
--- Ejemplo de validación cuando se intenta crear un movimiento
--- Si se intenta crear un RP desde un documento que no sea CDP:
-
-INSERT INTO movimiento_presupuestal 
-(numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, valor_movimiento, fecha_movimiento, observaciones, usuario_id)
-VALUES 
-('MOV-ERROR-001', 11, 1, 3, 100000.00, '2025-07-01', 'Intento inválido', 1);
--- documento_origen_id = 1 (PG), documento_afectado_id = 3 (RP)
-
--- Error: El documento origen no es un precedente válido para este tipo de documento
--- Porque RP solo puede originarse desde CDP, no desde PG
-```
-
-### 4. **Configuración Personalizada por Entidad**
-```sql
--- Ejemplo: Una entidad específica permite RPs directos desde PG
-INSERT INTO documento_tipo_precedente VALUES 
-(100, 3, 1, false, 3, 'Configuración especial: RP directo desde PG para casos excepcionales', true, NOW(), NOW());
-
--- Ahora esta entidad puede crear RPs directamente desde PG en casos especiales
-```
-
-### 5. **Casos Especiales de Liquidación**
-```sql
--- Validar liquidación de RP hacia CDP
-SELECT 'Liquidación válida' as resultado
-WHERE EXISTS (
-    SELECT 1 FROM documento_tipo_precedente dtp
-    WHERE dtp.tipo_documento_id = 2          -- CDP (puede recibir)
-      AND dtp.tipo_documento_precedente_id = 3 -- RP (puede devolver)
-      AND dtp.es_activo = true
-);
-
--- La liquidación es válida porque hay relación bidireccional RP ↔ CDP
-```
-
-### 6. **Auditoría de Precedencias**
-```sql
--- Consultar todas las relaciones de precedencia configuradas
-SELECT 
-    td_dest.nombre as documento_tipo,
-    td_orig.nombre as puede_originarse_desde,
-    dtp.es_obligatorio,
-    dtp.orden_precedencia,
-    dtp.descripcion
-FROM documento_tipo_precedente dtp
-JOIN tipo_documento td_dest ON dtp.tipo_documento_id = td_dest.id
-JOIN tipo_documento td_orig ON dtp.tipo_documento_precedente_id = td_orig.id
-WHERE dtp.es_activo = true
-ORDER BY td_dest.nombre, dtp.orden_precedencia;
-```
-
-### 7. **Beneficios de la Configuración de Precedencias**
-
-#### **Flexibilidad**:
-- Permite múltiples precedentes para un mismo tipo de documento
-- Configuración específica por entidad o caso de uso
-- Precedencias opcionales vs obligatorias
-
-#### **Control**:
-- Validación automática de flujos presupuestales
-- Prevención de movimientos inválidos
-- Mantenimiento de la integridad del flujo
-
-#### **Transparencia**:
-- Documentación clara de qué documentos pueden relacionarse
-- Auditoría completa de precedencias configuradas
-- Trazabilidad de decisiones de configuración
-
-#### **Escalabilidad**:
-- Fácil adición de nuevos tipos de documento
-- Configuración de precedencias sin cambios en código
-- Adaptación a normativas específicas por entidad
-
-Esta configuración garantiza que el sistema mantenga la coherencia del flujo presupuestal mientras permite la flexibilidad necesaria para casos especiales y diferentes entidades.
+**Comparación con Modelo Anterior:**
+| Operación | Modelo Anterior | Modelo Nuevo |
+|-----------|----------------|--------------|
+| Expedición CDP | MOV-002A + MOV-002B | MOV-002 (2 líneas) |
+| Expedición RP | MOV-003A + MOV-003B | MOV-003 (2 líneas) |
+| Expedición OP | MOV-004A + MOV-004B | MOV-004 (2 líneas) |
+| Liberación CDP | MOV-005A + MOV-005B | MOV-005 (2 líneas) |
+| Liquidación RP | MOV-006A + MOV-006B | MOV-006 (2 líneas) |
