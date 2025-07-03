@@ -86,6 +86,12 @@ INSERT INTO movimiento_tipo VALUES
 -- Tipos de movimiento para Orden de Pago (OP)
 (14, 'VALOR_INICIAL_OP', 'Valor Inicial OP', 'INCREMENTA', 'Asignación inicial de la OP', true, NOW(), NOW()),
 
+-- Tipos de movimiento para Liberación CDP (como documento independiente)
+(16, 'VALOR_INICIAL_LIBERACION_CDP', 'Valor Inicial Liberación CDP', 'INCREMENTA', 'Asignación inicial de la Liberación CDP', true, NOW(), NOW()),
+
+-- Tipos de movimiento para Liquidación RP (como documento independiente)
+(17, 'VALOR_INICIAL_LIQUIDACION_RP', 'Valor Inicial Liquidación RP', 'INCREMENTA', 'Asignación inicial de la Liquidación RP', true, NOW(), NOW()),
+
 -- Tipos de movimiento para CDP (desde liquidación RP)
 (15, 'RESTAURACION_POR_LIQUIDACION_RP', 'Restauración por Liquidación RP', 'INCREMENTA', 'Incremento en CDP por liquidación de RP', true, NOW(), NOW());
 ```
@@ -128,7 +134,13 @@ INSERT INTO movimiento_tipo_documento_tipo VALUES
 (14, 13, 3, true, NOW(), NOW()), -- LIQUIDACION_RP
 
 -- Orden de Pago (tipo_documento_id = 4)
-(15, 14, 4, true, NOW(), NOW()); -- VALOR_INICIAL_OP
+(15, 14, 4, true, NOW(), NOW()), -- VALOR_INICIAL_OP
+
+-- Liberación CDP (tipo_documento_id = 8)
+(16, 16, 8, true, NOW(), NOW()), -- VALOR_INICIAL_LIBERACION_CDP
+
+-- Liquidación RP (tipo_documento_id = 9)
+(17, 17, 9, true, NOW(), NOW()); -- VALOR_INICIAL_LIQUIDACION_RP
 ```
 
 ### Estructura Actualizada de Movimientos con Contrapartidas
@@ -273,6 +285,7 @@ INSERT INTO documento_tipo_precedente VALUES
 
 -- Nota: Los IDs de tipo_documento se asumen como:
 -- 1 = PG, 2 = CDP, 3 = RP, 4 = OP, 5 = Egreso, 6 = Cuenta por Pagar, 7 = Adición Presupuestal
+-- 8 = Liberación CDP, 9 = Liquidación RP
 ```
 
 ### Configuración de Contrapartidas de Movimientos
@@ -304,11 +317,17 @@ INSERT INTO movimiento_tipo_contrapartida VALUES
 -- VALOR_INICIAL_OP (14) genera automáticamente REDUCCION_COMPROMISO (12)
 (3, 14, 12, 1, true, 'Al crear una OP, se debe reducir automáticamente el RP', true, NOW(), NOW()),
 
+-- VALOR_INICIAL_LIBERACION_CDP (16) genera automáticamente LIBERACION_CDP (9)
+(4, 16, 9, 1, true, 'Al crear una Liberación CDP, se debe reducir automáticamente el CDP', true, NOW(), NOW()),
+
+-- VALOR_INICIAL_LIQUIDACION_RP (17) genera automáticamente LIQUIDACION_RP (13)
+(5, 17, 13, 1, true, 'Al crear una Liquidación RP, se debe reducir automáticamente el RP', true, NOW(), NOW()),
+
 -- LIBERACION_CDP (9) genera automáticamente RESTAURACION_DISPONIBILIDAD (6)
-(4, 9, 6, 1, true, 'Al liberar un CDP, se debe restaurar automáticamente el PG', true, NOW(), NOW()),
+(6, 9, 6, 1, true, 'Al liberar un CDP, se debe restaurar automáticamente el PG', true, NOW(), NOW()),
 
 -- LIQUIDACION_RP (13) genera automáticamente RESTAURACION_POR_LIQUIDACION_RP (15)
-(5, 13, 15, 1, true, 'Al liquidar un RP, se debe restaurar automáticamente el CDP', true, NOW(), NOW());
+(7, 13, 15, 1, true, 'Al liquidar un RP, se debe restaurar automáticamente el CDP', true, NOW(), NOW());
 ```
 
 ### Validación de Documentos Precedentes
@@ -952,327 +971,165 @@ WHERE id = 6; -- Ítem 2 CDP
 
 ---
 
-## PASO 5: Orden de Pago
+## PASO 5B: Liquidación del RP Restante
 
-### 5.1 Causación de la Obligación
-
-**Fecha**: 2025-04-15
-**Concepto**: Primer pago del contrato (50% = $60,000,000)
-**Documentos**: Acta de recibo satisfactorio, factura, paz y salvo
-
-### 5.2 Configuración Orden de Pago
+### 5B.1 Creación del Documento de Liquidación RP
 
 ```sql
--- Configuración de códigos para OP (hereda del RP)
--- Columnas: id, tipo_documento_id, tipo_codigo_id, es_obligatorio, orden_captura, validaciones_adicionales, es_activo
-INSERT INTO configuracion_codigo_tipo_documento VALUES 
-(7, 4, 1, true, 1, '{"heredar_de_rp": true}', true),  -- Rubro obligatorio
-(8, 4, 2, true, 2, '{"heredar_de_rp": true}', true); -- Fuente obligatoria
-```
-
-### 5.3 Creación de la Orden de Pago
-
-```sql
--- Documento OP (valores iniciales en 0, se llenan por movimientos)
+-- Crear documento de Liquidación RP
 -- Columnas: id, tipo_documento_id, numero_documento, fecha_documento, fecha_vencimiento, estado_actual, valor_total_inicial, valor_total_actual, observaciones, usuario_creacion_id, usuario_aprobacion_id, fecha_aprobacion, metadatos, es_activo, creado_en, actualizado_en
 INSERT INTO documento_presupuestal VALUES 
-(4, 4, 'OP-2025-001', '2025-04-15', NULL, 'EXPEDIDO', 0.00, 0.00, 
- 'Orden de pago primer avance contrato consultoría', 6, 7, '2025-04-15 14:30:00', 
- '{"contrato": "CNT-2025-001", "tipo_pago": "PRIMER_AVANCE", "porcentaje": 50, "factura": "FC-001"}', 
- true, '2025-04-15 14:00:00', '2025-04-15 14:30:00');
-```
+(6, 9, 'LIQ-RP-2025-001', '2025-04-30', NULL, 'ACTIVO', 60000000.00, 60000000.00, 
+ 'Liquidación de saldo no ejecutado del RP-2025-001', 6, 6, '2025-04-30 17:00:00', 
+ '{"motivo": "Saldo no ejecutado", "rp_origen": "RP-2025-001", "valor_ejecutado": 60000000.00}', 
+ true, '2025-04-30 16:30:00', '2025-04-30 17:00:00');
 
-### 5.4 Ítems de la Orden de Pago
-
-```sql
--- Ítem 1 OP: Servicios Profesionales con Recursos Propios (valores iniciales en 0)
--- Columnas: id, documento_id, numero_item, descripcion_item, valor_inicial, valor_actual, item_origen_id, metadatos_item, es_activo, creado_en, actualizado_en
+-- Crear ítems para la Liquidación RP
+-- Columnas: id, documento_id, item_numero, descripcion, valor_inicial, valor_actual, observaciones, es_activo, creado_en, actualizado_en
 INSERT INTO item_documento_presupuestal VALUES 
-(9, 4, 1, 'Primer pago contrato - Recursos Propios', 0.00, 0.00, 
- 7, '{"contrato": "CNT-2025-001", "porcentaje_rp": 50}', 
- true, '2025-04-15 14:00:00', '2025-04-15 14:00:00');
-
--- Ítem 2 OP: Servicios Profesionales con SGP (valores iniciales en 0)
--- Columnas: id, documento_id, numero_item, descripcion_item, valor_inicial, valor_actual, item_origen_id, metadatos_item, es_activo, creado_en, actualizado_en
-INSERT INTO item_documento_presupuestal VALUES 
-(10, 4, 2, 'Primer pago contrato - SGP', 0.00, 0.00, 
- 8, '{"contrato": "CNT-2025-001", "porcentaje_rp": 50}', 
- true, '2025-04-15 14:00:00', '2025-04-15 14:00:00');
+(13, 6, 1, 'Liquidación Servicios Profesionales - Recursos Propios', 40000000.00, 40000000.00, 
+ 'Liquidación saldo no ejecutado Fase 1', true, '2025-04-30 16:30:00', '2025-04-30 16:30:00'),
+(14, 6, 2, 'Liquidación Servicios Profesionales - SGP', 20000000.00, 20000000.00, 
+ 'Liquidación saldo no ejecutado Fase 2', true, '2025-04-30 16:30:00', '2025-04-30 16:30:00');
 ```
 
-### 5.5 Codificación OP
+### 5B.2 Movimientos de Liquidación del RP (Con Contrapartidas Automáticas)
 
 ```sql
--- Codificación Ítem 1 OP: Servicios Profesionales + Recursos Propios
--- Columnas: id, item_id, tipo_codigo_id, codigo_id, creado_en, actualizado_en
-INSERT INTO codificacion_item_presupuestal VALUES 
-(17, 9, 1, 4, '2025-04-15 14:00:00', '2025-04-15 14:00:00'), -- Rubro: Servicios Profesionales
-(18, 9, 2, 11, '2025-04-15 14:00:00', '2025-04-15 14:00:00'); -- Fuente: Ingresos Corrientes
-
--- Codificación Ítem 2 OP: Servicios Profesionales + SGP
--- Columnas: id, item_id, tipo_codigo_id, codigo_id, creado_en, actualizado_en
-INSERT INTO codificacion_item_presupuestal VALUES 
-(19, 10, 1, 4, '2025-04-15 14:00:00', '2025-04-15 14:00:00'), -- Rubro: Servicios Profesionales
-(20, 10, 2, 21, '2025-04-15 14:00:00', '2025-04-15 14:00:00'); -- Fuente: SGP
-```
-
-### 5.6 Movimientos de Afectación de la OP (Con Contrapartidas Automáticas)
-
-```sql
--- MOVIMIENTO ÚNICO: Expedición de la OP con contrapartida automática
+-- MOVIMIENTO ÚNICO: Expedición de la Liquidación RP con contrapartida automática
 -- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, valor_total_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
 INSERT INTO movimiento_presupuestal VALUES 
-(6, 'MOV-2025-004', 14, 4, 60000000.00, '2025-04-15', 
- 'Expedición OP-2025-001 con afectación automática del RP-2025-001', 'OP-2025-001', 6, '2025-04-15 14:30:00', 
- 'APROBADO', true, '2025-04-15 14:00:00', '2025-04-15 14:30:00');
+(7, 'MOV-2025-006', 17, 6, 60000000.00, '2025-04-30', 
+ 'Expedición Liquidación RP con afectación automática del RP-2025-001', 'LIQ-RP-2025-001', 6, '2025-04-30 17:00:00', 
+ 'APROBADO', true, '2025-04-30 16:30:00', '2025-04-30 17:00:00');
 
--- LÍNEA 1: Incremento en la OP (movimiento principal)
+-- LÍNEA 1: Incremento en la Liquidación RP (movimiento principal)
 -- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
 INSERT INTO detalle_movimiento_presupuestal VALUES 
-(6, 6, 1, 14, 4, 60000000.00, 'Valor inicial de la OP-2025-001', 
- true, '2025-04-15 14:00:00', '2025-04-15 14:30:00');
+(11, 7, 1, 17, 6, 60000000.00, 'Valor inicial de la Liquidación RP', 
+ true, '2025-04-30 16:30:00', '2025-04-30 17:00:00');
 
 -- LÍNEA 2: Reducción en el RP (contrapartida automática)
 -- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
 INSERT INTO detalle_movimiento_presupuestal VALUES 
-(7, 6, 2, 12, 3, 60000000.00, 'Contrapartida automática: Reducción compromiso RP-2025-001', 
- true, '2025-04-15 14:00:00', '2025-04-15 14:30:00');
+(12, 7, 2, 13, 3, 60000000.00, 'Contrapartida automática: Liquidación RP-2025-001', 
+ true, '2025-04-30 16:30:00', '2025-04-30 17:00:00');
  
--- Nota: movimiento_tipo_id = 14 'VALOR_INICIAL_OP' genera automáticamente tipo_id = 12 'REDUCCION_COMPROMISO'
--- Nota: Un solo movimiento (MOV-2025-004) con dos líneas que afectan documentos diferentes
+-- Nota: movimiento_tipo_id = 17 'VALOR_INICIAL_LIQUIDACION_RP' genera automáticamente tipo_id = 13 'LIQUIDACION_RP'
+-- Nota: Un solo movimiento (MOV-2025-006) con dos líneas que afectan documentos diferentes
 ```
 
-### 5.7 Detalle de Movimientos por Ítem - OP
+### 5B.3 Segundo Movimiento: Restauración al CDP
 
 ```sql
--- Detalle por ítem del movimiento OP (MOV-004)
+-- MOVIMIENTO ÚNICO: Restauración automática al CDP
+-- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, valor_total_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
+INSERT INTO movimiento_presupuestal VALUES 
+(10, 'MOV-2025-006B', 15, 6, 60000000.00, '2025-04-30', 
+ 'Restauración automática al CDP por Liquidación RP', 'LIQ-RP-2025-001', 6, '2025-04-30 17:00:00', 
+ 'APROBADO', true, '2025-04-30 16:30:00', '2025-04-30 17:00:00');
+
+-- LÍNEA 1: Incremento en el CDP (movimiento principal)
+-- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_presupuestal VALUES 
+(13, 10, 1, 15, 2, 60000000.00, 'Restauración disponibilidad CDP por liquidación RP', 
+ true, '2025-04-30 16:30:00', '2025-04-30 17:00:00');
+ 
+-- Nota: La restauración al CDP se ejecuta automáticamente cuando se procesa la liquidación RP
+```
+
+### 5B.4 Detalle de Movimientos de Liquidación
+
+```sql
+-- Detalle por ítem del movimiento de liquidación (MOV-006)
 -- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
 INSERT INTO detalle_movimiento_item VALUES 
--- Ítems afectados de la OP (línea 1 del movimiento)
-(13, 6, 9, 7, 40000000.00, 'OP Recursos Propios desde RP', 
- '2025-04-15 14:00:00', '2025-04-15 14:00:00'),
-(14, 6, 10, 8, 20000000.00, 'OP SGP desde RP', 
- '2025-04-15 14:00:00', '2025-04-15 14:00:00'),
+-- Ítems afectados de la Liquidación RP (línea 1 del movimiento)
+(23, 7, 13, 7, 40000000.00, 'Liquidación RP: Recursos Propios', 
+ '2025-04-30 16:30:00', '2025-04-30 16:30:00'),
+(24, 7, 14, 8, 20000000.00, 'Liquidación RP: SGP', 
+ '2025-04-30 16:30:00', '2025-04-30 16:30:00'),
 
 -- Ítems afectados del RP (línea 2 del movimiento - contrapartida)
-(15, 6, 7, NULL, 40000000.00, 'Reducción: RP Recursos Propios por OP', 
- '2025-04-15 14:00:00', '2025-04-15 14:00:00'),
-(16, 6, 8, NULL, 20000000.00, 'Reducción: RP SGP por OP', 
- '2025-04-15 14:00:00', '2025-04-15 14:00:00');
+(25, 7, 7, NULL, 40000000.00, 'Reducción: RP Recursos Propios por liquidación', 
+ '2025-04-30 16:30:00', '2025-04-30 16:30:00'),
+(26, 7, 8, NULL, 20000000.00, 'Reducción: RP SGP por liquidación', 
+ '2025-04-30 16:30:00', '2025-04-30 16:30:00');
 
--- Nota: Ambas líneas del movimiento comparten el mismo detalle por ítem
--- Nota: item_destino_id indica el ítem origen cuando es una transferencia
+-- Detalle por ítem del movimiento de restauración CDP (MOV-006B)
+-- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_item VALUES 
+-- Ítems afectados del CDP (restauración)
+(27, 10, 5, 13, 40000000.00, 'Restauración: CDP Fase 1 desde Liquidación RP', 
+ '2025-04-30 16:30:00', '2025-04-30 16:30:00'),
+(28, 10, 6, 14, 20000000.00, 'Restauración: CDP Fase 2 desde Liquidación RP', 
+ '2025-04-30 16:30:00', '2025-04-30 16:30:00');
+
+-- Nota: item_destino_id indica el ítem origen cuando es una restauración
 ```
 
-### 5.8 Relación OP con RP
+### 5B.5 Relación Liquidación RP con RP
 
 ```sql
--- Relación de la OP con el RP (movimiento único con contrapartida)
+-- Relación de la Liquidación RP con el RP original
 -- Columnas: id, documento_origen_id, documento_destino_id, tipo_relacion, valor_relacion, porcentaje_relacion, metadatos_relacion, fecha_relacion, es_activo, creado_en, actualizado_en
 INSERT INTO relacion_documento_presupuestal VALUES 
-(3, 3, 4, 'INCORPORA', 60000000.00, 50.00, 
- '{"tipo_operacion": "OBLIGACION", "factura": "FC-001", "acta": "AR-001", "movimiento_id": 6, "lineas": [1, 2]}', 
- '2025-04-15', true, '2025-04-15 14:00:00', '2025-04-15 14:00:00');
+(5, 3, 6, 'LIQUIDA', 60000000.00, 50.00, 
+ '{"tipo_operacion": "LIQUIDACION", "motivo": "Saldo no ejecutado", "movimiento_id": 7, "lineas": [1, 2]}', 
+ '2025-04-30', true, '2025-04-30 16:30:00', '2025-04-30 16:30:00');
  
 -- Nota: metadatos_relacion incluye el ID del movimiento único y las líneas que lo componen
 ```
 
-### 5.9 Estado Después del Paso 5
-
-**Actualización Automática por Movimiento:**
-```sql
--- Actualizar valores de la OP después del movimiento
--- Columnas en UPDATE: valor_total_inicial, valor_total_actual, actualizado_en
-UPDATE documento_presupuestal SET 
-    valor_total_inicial = 60000000.00,
-    valor_total_actual = 60000000.00,
-    actualizado_en = '2025-04-15 14:30:00'
-WHERE id = 4; -- OP-2025-001
-
--- Actualizar ítems de la OP después del movimiento
--- Columnas en UPDATE: valor_inicial, valor_actual, actualizado_en
-UPDATE item_documento_presupuestal SET 
-    valor_inicial = 40000000.00,
-    valor_actual = 40000000.00,
-    actualizado_en = '2025-04-15 14:30:00'
-WHERE id = 9; -- Ítem 1 OP
-
--- Columnas en UPDATE: valor_inicial, valor_actual, actualizado_en
-UPDATE item_documento_presupuestal SET 
-    valor_inicial = 20000000.00,
-    valor_actual = 20000000.00,
-    actualizado_en = '2025-04-15 14:30:00'
-WHERE id = 10; -- Ítem 2 OP
-
--- Reducir disponibilidad del RP automáticamente
--- Columnas en UPDATE: estado_actual, valor_actual, actualizado_en
-UPDATE documento_presupuestal SET 
-    estado_actual = 'OBLIGADO',
-    valor_actual = valor_actual - 60000000.00,  -- $120M - $60M = $60M por pagar
-    actualizado_en = '2025-04-15 14:30:00'
-WHERE id = 3; -- RP-2025-001
-
--- Actualizar ítems del RP
--- Columnas en UPDATE: valor_actual, actualizado_en
-UPDATE item_documento_presupuestal SET 
-    valor_actual = valor_actual - 40000000.00,  -- $80M - $40M = $40M por pagar
-    actualizado_en = '2025-04-15 14:30:00'
-WHERE id = 7; -- Ítem 1 RP
-
--- Columnas en UPDATE: valor_actual, actualizado_en
-UPDATE item_documento_presupuestal SET 
-    valor_actual = valor_actual - 20000000.00,  -- $40M - $20M = $20M por pagar
-    actualizado_en = '2025-04-15 14:30:00'
-WHERE id = 8; -- Ítem 2 RP
-```
-
-**Resumen de Estados:**
-- **PG**: $500,000,000 (sin cambios en total)
-- **CDP**: $180,000,000 total, $60,000,000 disponible (restaurado por liquidación)
-- **RP**: $120,000,000 total, $60,000,000 ejecutado, $60,000,000 liquidado
-- **OP**: $60,000,000 expedida y pendiente de pago
-
 ---
 
-## PASO 6: Liberación del CDP Restante
+## VENTAJAS DEL NUEVO MODELO: LIBERACIONES Y LIQUIDACIONES COMO DOCUMENTOS
 
-### 6.1 Situación
+### 1. **Trazabilidad Completa**
+- **Cada liberación y liquidación** tiene su propio documento con número único
+- **Auditoría mejorada**: Se puede consultar el historial completo de cada liberación/liquidación
+- **Reportes específicos**: Informes por tipo de documento (liberaciones, liquidaciones)
 
-**Fecha**: 2025-05-10
-**Motivo**: El contrato se ejecutó por $120,000,000 pero el CDP era por $180,000,000
-**Saldo a liberar**: $60,000,000 ($40M Recursos Propios + $20M SGP)
+### 2. **Separación de Responsabilidades**
+- **Creación del documento**: Registro de la decisión administrativa
+- **Afectación presupuestal**: Impacto automático en los documentos relacionados
+- **Restauración**: Devolución automática de recursos al origen
 
-### 6.2 Movimientos de Liberación del CDP (Con Contrapartidas Automáticas)
-
+### 3. **Doble Contrapartida**
 ```sql
--- MOVIMIENTO ÚNICO: Liberación del CDP con contrapartida automática
--- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, valor_total_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
-INSERT INTO movimiento_presupuestal VALUES 
-(8, 'MOV-2025-005', 9, NULL, 60000000.00, '2025-05-10', 
- 'Liberación CDP-2025-001 con restauración automática al PG', 'Memo-001-2025', 6, '2025-05-10 16:00:00', 
- 'APROBADO', true, '2025-05-10 15:30:00', '2025-05-10 16:00:00');
+-- Ejemplo: Liberación CDP
+MOV-005: Expedición Liberación CDP
+├── Línea 1: +$60M → Liberación CDP (documento nuevo)
+└── Línea 2: -$60M → CDP (contrapartida automática)
 
--- LÍNEA 1: Reducción en el CDP (movimiento principal)
--- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
-INSERT INTO detalle_movimiento_presupuestal VALUES 
-(8, 8, 1, 9, 2, 60000000.00, 'Liberación de saldo no ejecutado CDP-2025-001', 
- true, '2025-05-10 15:30:00', '2025-05-10 16:00:00');
-
--- LÍNEA 2: Incremento en el PG (contrapartida automática)
--- Columnas: id, movimiento_id, linea_numero, movimiento_tipo_id, documento_afectado_id, valor_linea, observaciones_linea, es_activo, creado_en, actualizado_en
-INSERT INTO detalle_movimiento_presupuestal VALUES 
-(9, 8, 2, 6, 1, 60000000.00, 'Contrapartida automática: Restauración disponibilidad PG', 
- true, '2025-05-10 15:30:00', '2025-05-10 16:00:00');
- 
--- Nota: movimiento_tipo_id = 9 'LIBERACION_CDP' genera automáticamente tipo_id = 6 'RESTAURACION_DISPONIBILIDAD'
--- Nota: Un solo movimiento (MOV-2025-005) con dos líneas que afectan documentos diferentes
+MOV-005B: Restauración automática al PG
+├── Línea 1: +$60M → PG (restauración)
+└── Línea 2: (procesamiento automático)
 ```
 
-### 6.3 Detalle de Movimientos de Liberación
+### 4. **Flexibilidad Operativa**
+- **Liberaciones parciales**: Múltiples liberaciones del mismo CDP
+- **Liquidaciones escalonadas**: Liquidación por fases del mismo RP
+- **Cancelaciones**: Reversa de liberaciones/liquidaciones con trazabilidad
 
-```sql
--- Detalle por ítem del movimiento de liberación (MOV-005)
--- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
-INSERT INTO detalle_movimiento_item VALUES 
--- Ítems afectados del CDP (línea 1 del movimiento)
-(17, 8, 5, NULL, 40000000.00, 'Liberación: CDP Fase 1', 
- '2025-05-10 15:30:00', '2025-05-10 15:30:00'),
-(18, 8, 6, NULL, 20000000.00, 'Liberación: CDP Fase 2', 
- '2025-05-10 15:30:00', '2025-05-10 15:30:00'),
+### 5. **Integridad Referencial**
+- **Relaciones documentales**: Cada liberación/liquidación referencia su documento origen
+- **Validaciones automáticas**: Control de valores y estados
+- **Conciliación**: Balance automático entre documentos
 
--- Ítems afectados del PG (línea 2 del movimiento - contrapartida)
-(19, 8, 1, 5, 40000000.00, 'Restauración: Servicios Profesionales RP desde CDP', 
- '2025-05-10 15:30:00', '2025-05-10 15:30:00'),
-(20, 8, 3, 6, 20000000.00, 'Restauración: Servicios Profesionales SGP desde CDP', 
- '2025-05-10 15:30:00', '2025-05-10 15:30:00');
+### 6. **Beneficios Contables**
+- **Cuentas por cobrar**: Las liberaciones generan cuentas por cobrar al Estado
+- **Cuentas por pagar**: Las liquidaciones generan cuentas por pagar a contratistas
+- **Estados financieros**: Mejor representación de la situación financiera
 
--- Nota: Ambas líneas del movimiento comparten el mismo detalle por ítem
--- Nota: item_destino_id indica el ítem origen cuando es una restauración
-```
+### 7. **Comparación de Modelos**
 
-### 6.4 Estado Final Después del Paso 6
-
-**Actualización Automática por Movimiento de Liberación:**
-```sql
--- CDP cambia a LIBERADO parcialmente
--- Columnas en UPDATE: estado_actual, valor_actual, actualizado_en
-UPDATE documento_presupuestal SET 
-    estado_actual = 'LIBERADO',
-    valor_actual = 0.00,  -- Todo el saldo disponible se liberó
-    actualizado_en = '2025-05-10 16:00:00'
-WHERE id = 2; -- CDP-2025-001
-
--- Actualizar ítems del CDP a cero
--- Columnas en UPDATE: valor_actual, actualizado_en
-UPDATE item_documento_presupuestal SET 
-    valor_actual = 0.00,
-    actualizado_en = '2025-05-10 16:00:00'
-WHERE id IN (5, 6); -- Ambos ítems del CDP
-
--- Restaurar disponibilidad en el PG automáticamente por movimiento inverso
--- Columnas en UPDATE: valor_actual, actualizado_en
-UPDATE item_documento_presupuestal SET 
-    valor_actual = valor_actual + 40000000.00,  -- $80M + $40M = $120M
-    actualizado_en = '2025-05-10 16:00:00'
-WHERE id = 1; -- Servicios Profesionales + Recursos Propios
-
--- Columnas en UPDATE: valor_actual, actualizado_en
-UPDATE item_documento_presupuestal SET 
-    valor_actual = valor_actual + 20000000.00,  -- $40M + $20M = $60M
-    actualizado_en = '2025-05-10 16:00:00'
-WHERE id = 3; -- Servicios Profesionales + SGP
-```
-
----
-
-## DIAGRAMA DE FLUJO CON MOVIMIENTOS ÚNICOS Y CONTRAPARTIDAS AUTOMÁTICAS
-
-```
-APROPIACION_INICIAL (MOV-001)
-    ↓ Línea 1: INCREMENTA PG +$500M
-PG-2025-001 ($500M disponible)
-    ↓ 
-MOV-002: EXPEDICION_CDP
-    ├── Línea 1: VALOR_INICIAL_CDP → CDP +$180M
-    └── Línea 2: AFECTACION_POR_CDP → PG -$180M (contrapartida automática)
-    ↓
-CDP-2025-001 ($180M disponible)
-    ↓
-MOV-003: EXPEDICION_RP
-    ├── Línea 1: VALOR_INICIAL_RP → RP +$120M
-    └── Línea 2: REDUCCION_DISPONIBILIDAD → CDP -$120M (contrapartida automática)
-    ↓
-RP-2025-001 ($120M disponible)
-    ├── MOV-004: EXPEDICION_OP
-    │   ├── Línea 1: VALOR_INICIAL_OP → OP +$60M
-    │   └── Línea 2: REDUCCION_COMPROMISO → RP -$60M (contrapartida automática)
-    │   ↓
-    │   OP-2025-001 ($60M disponible)
-    │
-    └── MOV-006: LIQUIDACION_RP
-        ├── Línea 1: LIQUIDACION_RP → RP -$60M
-        └── Línea 2: RESTAURACION_POR_LIQUIDACION_RP → CDP +$60M (contrapartida automática)
-        ↑
-        CDP-2025-001 ($60M restaurado)
-        ↓
-MOV-005: LIBERACION_CDP
-    ├── Línea 1: LIBERACION_CDP → CDP -$60M
-    └── Línea 2: RESTAURACION_DISPONIBILIDAD → PG +$60M (contrapartida automática)
-    ↑
-PG-2025-001 ($440M disponible)
-```
-
-**Ventajas del Nuevo Modelo:**
-- **6 movimientos únicos** en lugar de 10 movimientos separados
-- **Contrapartidas automáticas** garantizan equilibrio
-- **Numeración simplificada** sin sufijos A/B
-- **Atomicidad** de las operaciones presupuestales
-
-**Comparación con Modelo Anterior:**
-| Operación | Modelo Anterior | Modelo Nuevo |
-|-----------|----------------|--------------|
-| Expedición CDP | MOV-002A + MOV-002B | MOV-002 (2 líneas) |
-| Expedición RP | MOV-003A + MOV-003B | MOV-003 (2 líneas) |
-| Expedición OP | MOV-004A + MOV-004B | MOV-004 (2 líneas) |
-| Liberación CDP | MOV-005A + MOV-005B | MOV-005 (2 líneas) |
-| Liquidación RP | MOV-006A + MOV-006B | MOV-006 (2 líneas) |
+| Aspecto | Modelo Anterior | Modelo Nuevo |
+|---------|----------------|--------------|
+| **Liberación CDP** | Movimiento simple | Documento + Movimiento |
+| **Liquidación RP** | Movimiento simple | Documento + Movimiento |
+| **Trazabilidad** | Limitada | Completa |
+| **Auditabilidad** | Básica | Avanzada |
+| **Flexibilidad** | Rígida | Alta |
+| **Reportes** | Limitados | Completos |
+| **Integridad** | Manual | Automática |
