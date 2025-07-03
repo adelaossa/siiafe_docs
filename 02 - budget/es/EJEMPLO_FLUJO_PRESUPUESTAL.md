@@ -81,9 +81,13 @@ INSERT INTO movimiento_tipo VALUES
 -- Tipos de movimiento para Registro Presupuestal (RP)
 (11, 'VALOR_INICIAL_RP', 'Valor Inicial RP', 'INCREMENTA', 'Asignación inicial del RP', true, NOW(), NOW()),
 (12, 'REDUCCION_COMPROMISO', 'Reducción Compromiso', 'REDUCE', 'Disminución por obligaciones', true, NOW(), NOW()),
+(13, 'LIQUIDACION_RP', 'Liquidación RP', 'REDUCE', 'Liquidación y devolución de saldo no ejecutado al CDP', true, NOW(), NOW()),
 
 -- Tipos de movimiento para Orden de Pago (OP)
-(13, 'VALOR_INICIAL_OP', 'Valor Inicial OP', 'INCREMENTA', 'Asignación inicial de la OP', true, NOW(), NOW());
+(14, 'VALOR_INICIAL_OP', 'Valor Inicial OP', 'INCREMENTA', 'Asignación inicial de la OP', true, NOW(), NOW()),
+
+-- Tipos de movimiento para CDP (desde liquidación RP)
+(15, 'RESTAURACION_POR_LIQUIDACION_RP', 'Restauración por Liquidación RP', 'INCREMENTA', 'Incremento en CDP por liquidación de RP', true, NOW(), NOW());
 ```
 
 ### Relación Tipo de Movimiento - Tipo de Documento
@@ -116,13 +120,15 @@ INSERT INTO movimiento_tipo_documento_tipo VALUES
 (8, 8, 2, true, NOW(), NOW()),  -- VALOR_INICIAL_CDP
 (9, 9, 2, true, NOW(), NOW()),  -- LIBERACION_CDP
 (10, 10, 2, true, NOW(), NOW()), -- REDUCCION_DISPONIBILIDAD
+(11, 15, 2, true, NOW(), NOW()), -- RESTAURACION_POR_LIQUIDACION_RP
 
 -- Registro Presupuestal (tipo_documento_id = 3)
-(11, 11, 3, true, NOW(), NOW()), -- VALOR_INICIAL_RP
-(12, 12, 3, true, NOW(), NOW()), -- REDUCCION_COMPROMISO
+(12, 11, 3, true, NOW(), NOW()), -- VALOR_INICIAL_RP
+(13, 12, 3, true, NOW(), NOW()), -- REDUCCION_COMPROMISO
+(14, 13, 3, true, NOW(), NOW()), -- LIQUIDACION_RP
 
 -- Orden de Pago (tipo_documento_id = 4)
-(13, 13, 4, true, NOW(), NOW()); -- VALOR_INICIAL_OP
+(15, 14, 4, true, NOW(), NOW()); -- VALOR_INICIAL_OP
 ```
 
 ### Estructura Actualizada de Movimientos
@@ -148,6 +154,113 @@ CREATE TABLE movimiento_presupuestal (
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+```
+
+### Configuración de Documentos Precedentes
+
+```sql
+-- Tabla que define los documentos precedentes válidos para cada tipo de documento
+-- Columnas: id, tipo_documento_id, tipo_documento_precedente_id, es_obligatorio, orden_precedencia, descripcion, es_activo, creado_en, actualizado_en
+CREATE TABLE documento_tipo_precedente (
+    id SERIAL PRIMARY KEY,
+    tipo_documento_id INTEGER NOT NULL REFERENCES tipo_documento(id),
+    tipo_documento_precedente_id INTEGER NOT NULL REFERENCES tipo_documento(id),
+    es_obligatorio BOOLEAN DEFAULT TRUE,
+    orden_precedencia INTEGER DEFAULT 1,
+    descripcion TEXT,
+    es_activo BOOLEAN DEFAULT TRUE,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(tipo_documento_id, tipo_documento_precedente_id, orden_precedencia)
+);
+
+-- Configuración de precedencias estándar
+INSERT INTO documento_tipo_precedente VALUES 
+-- CDP debe estar precedido por PG
+(1, 2, 1, true, 1, 'CDP debe originarse desde un Presupuesto de Gasto', true, NOW(), NOW()),
+
+-- RP debe estar precedido por CDP
+(2, 3, 2, true, 1, 'RP debe originarse desde un CDP', true, NOW(), NOW()),
+
+-- OP debe estar precedida por RP
+(3, 4, 3, true, 1, 'OP debe originarse desde un RP', true, NOW(), NOW()),
+
+-- Egreso puede estar precedido por OP (opción 1)
+(4, 5, 4, false, 1, 'Egreso puede originarse desde una OP', true, NOW(), NOW()),
+
+-- Egreso puede estar precedido por Cuenta por Pagar (opción 2)
+(5, 5, 6, false, 2, 'Egreso puede originarse desde una Cuenta por Pagar de vigencia anterior', true, NOW(), NOW()),
+
+-- Adición presupuestal puede estar precedida por PG (para traslados)
+(6, 7, 1, false, 1, 'Adición presupuestal puede originarse desde PG para traslados', true, NOW(), NOW());
+
+-- Nota: Los IDs de tipo_documento se asumen como:
+-- 1 = PG, 2 = CDP, 3 = RP, 4 = OP, 5 = Egreso, 6 = Cuenta por Pagar, 7 = Adición Presupuestal
+```
+
+### Validación de Documentos Precedentes
+
+```sql
+-- Función para validar que un documento tenga el precedente correcto
+CREATE OR REPLACE FUNCTION validar_documento_precedente()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Solo validar si el documento tiene un origen definido
+    IF NEW.documento_origen_id IS NOT NULL THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM documento_tipo_precedente dtp
+            JOIN documento_presupuestal dp_origen ON dp_origen.id = NEW.documento_origen_id
+            JOIN documento_presupuestal dp_destino ON dp_destino.id = NEW.documento_afectado_id
+            WHERE dtp.tipo_documento_id = dp_destino.tipo_documento_id
+              AND dtp.tipo_documento_precedente_id = dp_origen.tipo_documento_id
+              AND dtp.es_activo = true
+        ) THEN
+            RAISE EXCEPTION 'El documento origen no es un precedente válido para este tipo de documento';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER validar_documento_precedente_trigger
+    BEFORE INSERT OR UPDATE ON movimiento_presupuestal
+    FOR EACH ROW EXECUTE FUNCTION validar_documento_precedente();
+```
+
+### Consulta de Precedentes Válidos
+
+```sql
+-- Función para consultar los precedentes válidos de un tipo de documento
+CREATE OR REPLACE FUNCTION obtener_precedentes_validos(p_tipo_documento_id INTEGER)
+RETURNS TABLE (
+    precedente_id INTEGER,
+    precedente_nombre VARCHAR,
+    es_obligatorio BOOLEAN,
+    orden_precedencia INTEGER,
+    descripcion TEXT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        dtp.tipo_documento_precedente_id,
+        td.nombre,
+        dtp.es_obligatorio,
+        dtp.orden_precedencia,
+        dtp.descripcion
+    FROM documento_tipo_precedente dtp
+    JOIN tipo_documento td ON dtp.tipo_documento_precedente_id = td.id
+    WHERE dtp.tipo_documento_id = p_tipo_documento_id
+      AND dtp.es_activo = true
+    ORDER BY dtp.orden_precedencia;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Ejemplo de uso:
+-- SELECT * FROM obtener_precedentes_validos(5); -- Para tipo documento 'Egreso'
+-- Resultado podría ser:
+-- precedente_id | precedente_nombre | es_obligatorio | orden_precedencia | descripcion
+-- 4             | Orden de Pago     | false          | 1                 | Egreso puede originarse desde una OP
+-- 6             | Cuenta por Pagar  | false          | 2                 | Egreso puede originarse desde una Cuenta por Pagar
 ```
 
 ---
@@ -467,7 +580,7 @@ INSERT INTO detalle_movimiento_item VALUES
  '2025-02-15 09:00:00', '2025-02-15 09:00:00');
 ```
 
-### 3.8 Relación CDP con PG
+### 3.8 Relación CDP with PG
 
 ```sql
 -- Relaciones del CDP con el PG
@@ -528,7 +641,7 @@ WHERE id = 3; -- Servicios Profesionales + SGP
 
 ---
 
-## PASO 4: Expedición de Registro Presupuestal (RP)
+## PASO 4: Expedición de Registro Presupestal (RP)
 
 ### 4.1 Adjudicación del Contrato
 
@@ -610,8 +723,6 @@ INSERT INTO movimiento_presupuestal VALUES
 (5, 'MOV-2025-003B', 11, 3, 3, 4, 120000000.00, '2025-03-01', 
  'Valor inicial del RP-2025-001 por afectación desde CDP-2025-001', 'RP-2025-001', 4, '2025-03-01 10:30:00', 
  'APROBADO', true, '2025-03-01 10:00:00', '2025-03-01 10:30:00');
- 
--- Nota: movimiento_tipo_id = 11 corresponde a 'VALOR_INICIAL_RP' que tiene efecto 'INCREMENTA'
 ```
 
 ### 4.7 Detalle de Movimientos por Ítem - RP
@@ -680,7 +791,7 @@ UPDATE documento_presupuestal SET
     actualizado_en = '2025-03-01 10:30:00'
 WHERE id = 2; -- CDP-2025-001
 
--- Actualizar ítems del CDP
+-- Actualizar ítems del CDP después del movimiento
 -- Columnas en UPDATE: valor_actual, actualizado_en
 UPDATE item_documento_presupuestal SET 
     valor_actual = valor_actual - 80000000.00,  -- $120M - $80M = $40M disponible
@@ -696,8 +807,8 @@ WHERE id = 6; -- Ítem 2 CDP
 
 **Resumen de Estados:**
 - **PG**: $500,000,000 (sin cambios en total)
-- **CDP**: $180,000,000 total, $120,000,000 comprometido, $60,000,000 disponible
-- **RP**: $120,000,000 total, $60,000,000 obligado, $60,000,000 por obligar
+- **CDP**: $180,000,000 total, $60,000,000 disponible (restaurado por liquidación)
+- **RP**: $120,000,000 total, $60,000,000 ejecutado, $60,000,000 liquidado
 - **OP**: $60,000,000 expedida y pendiente de pago
 
 ---
@@ -779,12 +890,12 @@ INSERT INTO movimiento_presupuestal VALUES
 -- MOVIMIENTO 2: Incremento en la OP (documento destino)
 -- Columnas: id, numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, movimiento_relacionado_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
 INSERT INTO movimiento_presupuestal VALUES 
-(7, 'MOV-2025-004B', 13, 4, 4, 6, 60000000.00, '2025-04-15', 
+(7, 'MOV-2025-004B', 14, 4, 4, 6, 60000000.00, '2025-04-15', 
  'Valor inicial de la OP-2025-001 por afectación desde RP-2025-001', 'OP-2025-001', 6, '2025-04-15 14:30:00', 
  'APROBADO', true, '2025-04-15 14:00:00', '2025-04-15 14:30:00');
  
 -- Nota: movimiento_tipo_id = 12 corresponde a 'REDUCCION_COMPROMISO' que tiene efecto 'REDUCE'
--- Nota: movimiento_tipo_id = 13 corresponde a 'VALOR_INICIAL_OP' que tiene efecto 'INCREMENTA'
+-- Nota: movimiento_tipo_id = 14 corresponde a 'VALOR_INICIAL_OP' que tiene efecto 'INCREMENTA'
 ```
 
 ### 5.7 Detalle de Movimientos por Ítem - OP
@@ -869,8 +980,8 @@ WHERE id = 8; -- Ítem 2 RP
 
 **Resumen de Estados:**
 - **PG**: $500,000,000 (sin cambios en total)
-- **CDP**: $180,000,000 total, $120,000,000 comprometido, $60,000,000 disponible
-- **RP**: $120,000,000 total, $60,000,000 obligado, $60,000,000 por obligar
+- **CDP**: $180,000,000 total, $60,000,000 disponible (restaurado por liquidación)
+- **RP**: $120,000,000 total, $60,000,000 ejecutado, $60,000,000 liquidado
 - **OP**: $60,000,000 expedida y pendiente de pago
 
 ---
@@ -953,226 +1064,120 @@ WHERE id = 1; -- Servicios Profesionales + Recursos Propios
 -- Columnas en UPDATE: valor_actual, actualizado_en
 UPDATE item_documento_presupuestal SET 
     valor_actual = valor_actual + 20000000.00,  -- $40M + $20M = $60M
+   
     actualizado_en = '2025-05-10 16:00:00'
 WHERE id = 3; -- Servicios Profesionales + SGP
 ```
 
 ---
 
-## RESUMEN FINAL DEL FLUJO
+## CASOS DE USO DE DOCUMENTOS PRECEDENTES
 
-### Estado Final de Documentos
-
-| Documento | Estado | Valor Total | Valor Actual | Descripción |
-|-----------|--------|-------------|--------------|-------------|
-| **PG-2025-001** | VIGENTE | $500,000,000 | $500,000,000 | Presupuesto base restaurado |
-| **CDP-2025-001** | LIBERADO | $180,000,000 | $0 | CDP liberado después de uso parcial |
-| **RP-2025-001** | OBLIGADO | $120,000,000 | $60,000,000 | RP con obligación parcial |
-| **OP-2025-001** | EXPEDIDO | $60,000,000 | $60,000,000 | Orden de pago pendiente |
-
-### Disponibilidad Final por Rubro/Fuente
-
-| Rubro/Fuente | Apropiación | Comprometido | Obligado | Disponible |
-|--------------|-------------|--------------|-----------|------------|
-| **Servicios Profesionales + RP** | $200,000,000 | $80,000,000 | $40,000,000 | $120,000,000 |
-| **Servicios Técnicos + RP** | $150,000,000 | $0 | $0 | $150,000,000 |
-| **Servicios Profesionales + SGP** | $100,000,000 | $40,000,000 | $20,000,000 | $60,000,000 |
-| **Servicios Técnicos + SGP** | $50,000,000 | $0 | $0 | $50,000,000 |
-
-### Trazabilidad Completa
-
-```
-PG-2025-001 ($500M)
-├── CDP-2025-001 ($180M) → LIBERADO
-│   ├── RP-2025-001 ($120M) → OBLIGADO
-│   │   └── OP-2025-001 ($60M) → EXPEDIDO
-│   └── Liberación ($60M) → Devuelto al PG
-└── Disponible ($380M) → Disponible para nuevos CDPs
-```
-
-### Consultas de Verificación
-
+### 1. **Precedencia Obligatoria (Flujo Estándar)**
 ```sql
--- Verificar disponibilidad actual
--- Columnas: id, descripcion_item, valor_inicial, valor_actual, comprometido_obligado (calculado)
-SELECT 
-    i.id,
-    i.descripcion_item,
-    i.valor_inicial,
-    i.valor_actual,
-    i.valor_inicial - i.valor_actual as comprometido_obligado
-FROM item_documento_presupuestal i
-WHERE i.documento_id = 1 AND i.es_activo = true;
+-- Caso: Un CDP debe originarse desde un PG
+SELECT 'Válido' as resultado
+FROM documento_tipo_precedente dtp
+WHERE dtp.tipo_documento_id = 2          -- CDP
+  AND dtp.tipo_documento_precedente_id = 1 -- PG
+  AND dtp.es_obligatorio = true;
 
--- Verificar trazabilidad completa
--- Columnas: origen (numero_documento), destino (numero_documento), tipo_relacion, valor_relacion, fecha_relacion
-SELECT 
-    do.numero_documento as origen,
-    dd.numero_documento as destino,
-    rd.tipo_relacion,
-    rd.valor_relacion,
-    rd.fecha_relacion
-FROM relacion_documento_presupuestal rd
-JOIN documento_presupuestal do ON rd.documento_origen_id = do.id
-JOIN documento_presupuestal dd ON rd.documento_destino_id = dd.id
-WHERE rd.es_activo = true
-ORDER BY rd.fecha_relacion;
+-- Si se intenta crear un CDP sin PG precedente, se rechaza automáticamente
 ```
 
-Este ejemplo demuestra cómo el sistema maneja la flexibilidad real del manejo presupuestal, permitiendo compromisos parciales, liberaciones y manteniendo la trazabilidad completa en todo momento.
-
----
-
-## DIAGRAMA DE FLUJO DE MOVIMIENTOS DOBLES CON TIPOS NORMALIZADOS
-
-```
-APROPIACION_INICIAL (MOV-001, tipo_id=1, efecto=INCREMENTA)
-    ↓ INCREMENTA $500M
-PG-2025-001 ($500M disponible)
-    ↓ MOV-002A: AFECTACION_POR_CDP (tipo_id=7, efecto=REDUCE) (-$180M)
-    ↓ MOV-002B: VALOR_INICIAL_CDP (tipo_id=8, efecto=INCREMENTA) (+$180M)
-CDP-2025-001 ($180M disponible)
-    ├── MOV-003A: REDUCCION_DISPONIBILIDAD (tipo_id=10, efecto=REDUCE) (-$120M)
-    │   MOV-003B: VALOR_INICIAL_RP (tipo_id=11, efecto=INCREMENTA) (+$120M)
-    │   ↓ RP-2025-001 ($120M disponible)
-    │       ↓ MOV-004A: REDUCCION_COMPROMISO (tipo_id=12, efecto=REDUCE) (-$60M)
-    │       ↓ MOV-004B: VALOR_INICIAL_OP (tipo_id=13, efecto=INCREMENTA) (+$60M)
-    │       OP-2025-001 ($60M disponible)
-    │
-    └── MOV-005A: LIBERACION_CDP (tipo_id=9, efecto=REDUCE) (-$60M)
-        MOV-005B: RESTAURACION_DISPONIBILIDAD (tipo_id=6, efecto=INCREMENTA) (+$60M)
-        ↑ PG-2025-001 (saldo restaurado)
-```
-
-## ARQUITECTURA NORMALIZADA DE TIPOS DE MOVIMIENTO
-
-```
-┌─────────────────────┐    ┌──────────────────────────┐    ┌───────────────────────┐
-│   movimiento_tipo   │    │ movimiento_tipo_documento│    │   tipo_documento      │
-│                     │    │         _tipo            │    │                       │
-│ id (PK)             │◄───┤ movimiento_tipo_id (FK)  │───►│ id (PK)               │
-│ codigo              │    │ tipo_documento_id (FK)   │    │ nombre                │
-│ nombre              │    │ es_activo                │    │ descripcion           │
-│ efecto              │    │ creado_en                │    │ estado                │
-│ descripcion         │    │ actualizado_en           │    │                       │
-│ es_activo           │    └──────────────────────────┘    └───────────────────────┘
-│ creado_en           │
-│ actualizado_en      │
-└─────────────────────┘
-           │
-           │
-           ▼
-┌─────────────────────┐
-│ movimiento_presup.  │
-│                     │
-│ id (PK)             │
-│ numero_movimiento   │
-│ movimiento_tipo_id  │◄── Referencia normalizada
-│ documento_origen_id │
-│ documento_afectado_ │
-│ movimiento_relacion │
-│ valor_movimiento    │
-│ fecha_movimiento    │
-│ observaciones       │
-│ documento_soporte   │
-│ usuario_id          │
-│ fecha_aprobacion    │
-│ estado              │
-│ es_activo           │
-│ creado_en           │
-│ actualizado_en      │
-└─────────────────────┘
-```
-
-## PRINCIPIOS DE CONSISTENCIA CON NORMALIZACIÓN
-
-### 1. **Movimientos Dobles Atómicos**
-Cada afectación genera **DOS movimientos separados pero relacionados**:
-- **Movimiento A**: Reduce el saldo del documento origen
-- **Movimiento B**: Incrementa el saldo del documento destino
-- Ambos movimientos se referencian mutuamente (`movimiento_relacionado_id`)
-
-### 2. **Tipos de Movimiento Normalizados por Documento**
+### 2. **Precedencia Múltiple (Flexibilidad)**
 ```sql
--- Consulta de tipos válidos para Presupuesto de Gasto
-SELECT mt.id, mt.codigo, mt.nombre, mt.efecto
-FROM movimiento_tipo mt
-JOIN movimiento_tipo_documento_tipo mtdt ON mt.id = mtdt.movimiento_tipo_id
-WHERE mtdt.tipo_documento_id = 1 -- PG
-  AND mtdt.es_activo = true;
+-- Caso: Un Egreso puede originarse desde OP o Cuenta por Pagar
+SELECT 
+    td.nombre as precedente_valido,
+    dtp.orden_precedencia,
+    dtp.descripcion
+FROM documento_tipo_precedente dtp
+JOIN tipo_documento td ON dtp.tipo_documento_precedente_id = td.id
+WHERE dtp.tipo_documento_id = 5  -- Egreso
+  AND dtp.es_activo = true
+ORDER BY dtp.orden_precedencia;
 
 -- Resultado:
--- id | codigo                        | nombre                        | efecto
--- 1  | APROPIACION_INICIAL          | Apropiación Inicial           | INCREMENTA
--- 2  | ADICION_PRESUPUESTAL         | Adición Presupuestal          | INCREMENTA
--- 3  | REDUCCION_PRESUPUESTAL       | Reducción Presupuestal        | REDUCE
--- 4  | TRASLADO_PRESUPUESTAL_ORIGEN | Traslado Presupuestal Origen  | REDUCE
--- 5  | TRASLADO_PRESUPUESTAL_DESTINO| Traslado Presupuestal Destino | INCREMENTA
--- 6  | RESTAURACION_DISPONIBILIDAD  | Restauración Disponibilidad   | INCREMENTA
--- 7  | AFECTACION_POR_CDP           | Afectación por CDP            | REDUCE
+-- precedente_valido | orden_precedencia | descripcion
+-- Orden de Pago     | 1                 | Egreso puede originarse desde una OP
+-- Cuenta por Pagar  | 2                 | Egreso puede originarse desde Cuenta por Pagar
 ```
 
-### 3. **Efecto Automático por Tipo**
-- El efecto (INCREMENTA/REDUCE) se determina automáticamente por `movimiento_tipo.efecto`
-- No hay riesgo de error manual en la asignación del efecto
-- Garantiza consistencia en todos los movimientos del mismo tipo
-
-### 4. **Trazabilidad Completa con Información Semántica**
-Cada movimiento incluye:
-- `movimiento_tipo_id`: Referencia al tipo normalizado
-- `documento_origen_id`: Documento que inicia la operación
-- `documento_afectado_id`: Documento que recibe el impacto
-- `movimiento_relacionado_id`: Movimiento complementario
-- El efecto se obtiene de `movimiento_tipo.efecto`
-
-### 5. **Validación Automática**
+### 3. **Validación en Tiempo Real**
 ```sql
--- Trigger para validar tipos de movimiento permitidos
-CREATE OR REPLACE FUNCTION validar_tipo_movimiento_documento()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM movimiento_tipo_documento_tipo mtdt
-        JOIN documento_presupuestal dp ON dp.tipo_documento_id = mtdt.tipo_documento_id
-        WHERE mtdt.movimiento_tipo_id = NEW.movimiento_tipo_id
-          AND dp.id = NEW.documento_afectado_id
-          AND mtdt.es_activo = true
-    ) THEN
-        RAISE EXCEPTION 'Tipo de movimiento % no permitido para este tipo de documento', NEW.movimiento_tipo_id;
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+-- Ejemplo de validación cuando se intenta crear un movimiento
+-- Si se intenta crear un RP desde un documento que no sea CDP:
 
-CREATE TRIGGER validar_tipo_movimiento_documento_trigger
-    BEFORE INSERT OR UPDATE ON movimiento_presupuestal
-    FOR EACH ROW EXECUTE FUNCTION validar_tipo_movimiento_documento();
+INSERT INTO movimiento_presupuestal 
+(numero_movimiento, movimiento_tipo_id, documento_origen_id, documento_afectado_id, valor_movimiento, fecha_movimiento, observaciones, usuario_id)
+VALUES 
+('MOV-ERROR-001', 11, 1, 3, 100000.00, '2025-07-01', 'Intento inválido', 1);
+-- documento_origen_id = 1 (PG), documento_afectado_id = 3 (RP)
+
+-- Error: El documento origen no es un precedente válido para este tipo de documento
+-- Porque RP solo puede originarse desde CDP, no desde PG
 ```
 
-### 6. **Cadena de Afectaciones con Tipos Normalizados**
+### 4. **Configuración Personalizada por Entidad**
 ```sql
--- Ejemplo de cadena completa con tipos normalizados:
-PG (Ítem 1): $200M 
-    ↓ MOV-002A (tipo_id=7, REDUCE) (-$120M) → $80M 
-    ↓ MOV-005B (tipo_id=6, INCREMENTA) (+$40M) → $120M (después liberación)
+-- Ejemplo: Una entidad específica permite RPs directos desde PG
+INSERT INTO documento_tipo_precedente VALUES 
+(100, 3, 1, false, 3, 'Configuración especial: RP directo desde PG para casos excepcionales', true, NOW(), NOW());
 
-CDP (Ítem 1): $0 
-    ↓ MOV-002B (tipo_id=8, INCREMENTA) (+$120M) → $120M 
-    ↓ MOV-003A (tipo_id=10, REDUCE) (-$80M) → $40M 
-    ↓ MOV-005A (tipo_id=9, REDUCE) (-$40M) → $0 (después liberación)
-
-RP (Ítem 1): $0 
-    ↓ MOV-003B (tipo_id=11, INCREMENTA) (+$80M) → $80M 
-    ↓ MOV-004A (tipo_id=12, REDUCE) (-$40M) → $40M (después obligación)
-
-OP (Ítem 1): $0 
-    ↓ MOV-004B (tipo_id=13, INCREMENTA) (+$40M) → $40M (pendiente de pago)
+-- Ahora esta entidad puede crear RPs directamente desde PG en casos especiales
 ```
 
-### 7. **Integridad Referencial con Normalización**
-- Cada movimiento referencia un tipo normalizado válido
-- Los tipos están relacionados con documentos específicos
-- Los detalles de movimiento mapean ítems origen y destino correctamente
-- Las relaciones entre documentos incluyen IDs de ambos movimientos con sus tipos
+### 5. **Casos Especiales de Liquidación**
+```sql
+-- Validar liquidación de RP hacia CDP
+SELECT 'Liquidación válida' as resultado
+WHERE EXISTS (
+    SELECT 1 FROM documento_tipo_precedente dtp
+    WHERE dtp.tipo_documento_id = 2          -- CDP (puede recibir)
+      AND dtp.tipo_documento_precedente_id = 3 -- RP (puede devolver)
+      AND dtp.es_activo = true
+);
 
-Este enfoque normalizado garantiza la consistencia, reduce errores y facilita el mantenimiento del sistema presupuestal.
+-- La liquidación es válida porque hay relación bidireccional RP ↔ CDP
+```
+
+### 6. **Auditoría de Precedencias**
+```sql
+-- Consultar todas las relaciones de precedencia configuradas
+SELECT 
+    td_dest.nombre as documento_tipo,
+    td_orig.nombre as puede_originarse_desde,
+    dtp.es_obligatorio,
+    dtp.orden_precedencia,
+    dtp.descripcion
+FROM documento_tipo_precedente dtp
+JOIN tipo_documento td_dest ON dtp.tipo_documento_id = td_dest.id
+JOIN tipo_documento td_orig ON dtp.tipo_documento_precedente_id = td_orig.id
+WHERE dtp.es_activo = true
+ORDER BY td_dest.nombre, dtp.orden_precedencia;
+```
+
+### 7. **Beneficios de la Configuración de Precedencias**
+
+#### **Flexibilidad**:
+- Permite múltiples precedentes para un mismo tipo de documento
+- Configuración específica por entidad o caso de uso
+- Precedencias opcionales vs obligatorias
+
+#### **Control**:
+- Validación automática de flujos presupuestales
+- Prevención de movimientos inválidos
+- Mantenimiento de la integridad del flujo
+
+#### **Transparencia**:
+- Documentación clara de qué documentos pueden relacionarse
+- Auditoría completa de precedencias configuradas
+- Trazabilidad de decisiones de configuración
+
+#### **Escalabilidad**:
+- Fácil adición de nuevos tipos de documento
+- Configuración de precedencias sin cambios en código
+- Adaptación a normativas específicas por entidad
+
+Esta configuración garantiza que el sistema mantenga la coherencia del flujo presupuestal mientras permite la flexibilidad necesaria para casos especiales y diferentes entidades.
