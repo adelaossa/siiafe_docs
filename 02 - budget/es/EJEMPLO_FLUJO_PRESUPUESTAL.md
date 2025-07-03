@@ -6,6 +6,31 @@
 **Vigencia**: 2025  
 **Proceso**: Contratación de servicios de consultoría para fortalecimiento institucional
 
+## Principios de la Arquitectura Basada en Movimientos
+
+### 1. **Todos los valores son movimientos**
+- Los documentos presupuestales se crean con valores iniciales en **0.00**
+- Toda apropiación, afectación o liberación se registra como un **movimiento presupuestal**
+- Los valores actuales se calculan y actualizan automáticamente después de cada movimiento
+
+### 2. **Movimientos bi-direccionales**
+- Cuando un documento consume saldo de otro (ej. RP que consume CDP):
+  - Se crea un movimiento de **afectación** hacia el documento destino
+  - Se **reduce automáticamente** el saldo disponible del documento origen
+  - Se mantiene la **trazabilidad completa** en ambas direcciones
+
+### 3. **Tipos de movimientos**
+- **APROPIACION_INICIAL**: Dotación inicial del presupuesto
+- **AFECTACION_CDP**: Reserva de recursos para disponibilidad presupuestal
+- **AFECTACION_RP**: Compromiso de recursos para contratos
+- **AFECTACION_OP**: Obligación de recursos para pagos
+- **LIBERACION**: Devolución de recursos no utilizados
+
+### 4. **Auditabilidad total**
+- Cada cambio de valor queda registrado como un movimiento identificable
+- Los movimientos tienen fecha, usuario, documento soporte y estado
+- Se puede reconstruir el estado de cualquier momento histórico
+
 ---
 
 ## PASO 1: Estructura de Códigos
@@ -68,10 +93,10 @@ INSERT INTO configuracion_codigo_tipo_documento VALUES
 ### 2.2 Creación del Presupuesto General
 
 ```sql
--- Documento Presupuesto General
+-- Documento Presupuesto General (valores iniciales en 0, se llenan por movimientos)
 -- Columnas: id, tipo_documento_id, numero_documento, fecha_documento, fecha_vencimiento, estado_actual, valor_total_inicial, valor_total_actual, observaciones, usuario_creacion_id, usuario_aprobacion_id, fecha_aprobacion, metadatos, es_activo, creado_en, actualizado_en
 INSERT INTO documento_presupuestal VALUES 
-(1, 1, 'PG-2025-001', '2025-01-01', NULL, 'VIGENTE', 500000000.00, 500000000.00, 
+(1, 1, 'PG-2025-001', '2025-01-01', NULL, 'VIGENTE', 0.00, 0.00, 
  'Presupuesto de funcionamiento vigencia 2025', 1, 2, '2025-01-15 10:00:00', 
  '{"decreto": "001-2025", "fecha_sancion": "2025-01-15"}', true, '2025-01-01 08:00:00', '2025-01-15 10:00:00');
 ```
@@ -79,29 +104,31 @@ INSERT INTO documento_presupuestal VALUES
 ### 2.3 Ítems del Presupuesto
 
 ```sql
--- Ítem 1: Servicios Profesionales con Recursos Propios
+-- Ítem 1: Servicios Profesionales con Recursos Propios (valores iniciales en 0)
 -- Columnas: id, documento_id, numero_item, descripcion_item, valor_inicial, valor_actual, item_origen_id, metadatos_item, es_activo, creado_en, actualizado_en
 INSERT INTO item_documento_presupuestal VALUES 
-(1, 1, 1, 'Servicios profesionales y consultoría', 200000000.00, 200000000.00, 
+(1, 1, 1, 'Servicios profesionales y consultoría', 0.00, 0.00, 
  NULL, '{"descripcion_detallada": "Contratación de servicios profesionales para fortalecimiento institucional"}', 
  true, '2025-01-01 08:00:00', '2025-01-01 08:00:00');
 
 -- Ítem 2: Servicios Técnicos con Recursos Propios  
+-- Columnas: id, documento_id, numero_item, descripcion_item, valor_inicial, valor_actual, item_origen_id, metadatos_item, es_activo, creado_en, actualizado_en
 INSERT INTO item_documento_presupuestal VALUES 
-(2, 1, 2, 'Servicios técnicos especializados', 150000000.00, 150000000.00, 
+(2, 1, 2, 'Servicios técnicos especializados', 0.00, 0.00, 
  NULL, '{"descripcion_detallada": "Contratación de servicios técnicos especializados"}', 
  true, '2025-01-01 08:00:00', '2025-01-01 08:00:00');
 
 -- Ítem 3: Servicios Profesionales con SGP
+-- Columnas: id, documento_id, numero_item, descripcion_item, valor_inicial, valor_actual, item_origen_id, metadatos_item, es_activo, creado_en, actualizado_en
 INSERT INTO item_documento_presupuestal VALUES 
-(3, 1, 3, 'Servicios profesionales - Fortalecimiento', 100000000.00, 100000000.00, 
+(3, 1, 3, 'Servicios profesionales - Fortalecimiento', 0.00, 0.00, 
  NULL, '{"descripcion_detallada": "Servicios profesionales financiados con SGP"}', 
  true, '2025-01-01 08:00:00', '2025-01-01 08:00:00');
 
 -- Ítem 4: Servicios Técnicos con SGP
 -- Columnas: id, documento_id, numero_item, descripcion_item, valor_inicial, valor_actual, item_origen_id, metadatos_item, es_activo, creado_en, actualizado_en
 INSERT INTO item_documento_presupuestal VALUES 
-(4, 1, 4, 'Servicios técnicos - Capacitación', 50000000.00, 50000000.00, 
+(4, 1, 4, 'Servicios técnicos - Capacitación', 0.00, 0.00, 
  NULL, '{"descripcion_detallada": "Servicios técnicos de capacitación con SGP"}', 
  true, '2025-01-01 08:00:00', '2025-01-01 08:00:00');
 ```
@@ -134,7 +161,75 @@ INSERT INTO codificacion_item_presupuestal VALUES
 (8, 4, 2, 21, '2025-01-01 08:00:00', '2025-01-01 08:00:00'); -- Fuente: SGP
 ```
 
-### 2.5 Estado Después del Paso 2
+### 2.5 Movimientos de Apropiación Inicial
+
+```sql
+-- Movimiento de apropiación inicial del presupuesto
+-- Columnas: id, numero_movimiento, tipo_movimiento, documento_origen_id, documento_destino_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
+INSERT INTO movimiento_presupuestal VALUES 
+(1, 'MOV-2025-001', 'APROPIACION_INICIAL', NULL, 1, 500000000.00, '2025-01-01', 
+ 'Apropiación inicial del presupuesto de funcionamiento 2025', 'Acuerdo-001-2025', 2, '2025-01-15 10:00:00', 
+ 'APROBADO', true, '2025-01-01 08:00:00', '2025-01-15 10:00:00');
+```
+
+### 2.6 Detalle de Movimientos por Ítem
+
+```sql
+-- Detalle del movimiento por ítems - Apropiación inicial
+-- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_item VALUES 
+(1, 1, 1, NULL, 200000000.00, 'Apropiación inicial - Servicios Profesionales con Recursos Propios', 
+ '2025-01-01 08:00:00', '2025-01-01 08:00:00'),
+(2, 1, 2, NULL, 150000000.00, 'Apropiación inicial - Servicios Técnicos con Recursos Propios', 
+ '2025-01-01 08:00:00', '2025-01-01 08:00:00'),
+(3, 1, 3, NULL, 100000000.00, 'Apropiación inicial - Servicios Profesionales con SGP', 
+ '2025-01-01 08:00:00', '2025-01-01 08:00:00'),
+(4, 1, 4, NULL, 50000000.00, 'Apropiación inicial - Servicios Técnicos con SGP', 
+ '2025-01-01 08:00:00', '2025-01-01 08:00:00');
+```
+
+### 2.7 Actualización de Valores Después de Apropiación
+
+```sql
+-- Actualizar documento con valores de apropiación
+-- Columnas en UPDATE: valor_total_inicial, valor_total_actual, actualizado_en
+UPDATE documento_presupuestal SET 
+    valor_total_inicial = 500000000.00,
+    valor_total_actual = 500000000.00,
+    actualizado_en = '2025-01-15 10:00:00'
+WHERE id = 1; -- PG-2025-001
+
+-- Actualizar ítems con valores de apropiación
+-- Columnas en UPDATE: valor_inicial, valor_actual, actualizado_en
+UPDATE item_documento_presupuestal SET 
+    valor_inicial = 200000000.00,
+    valor_actual = 200000000.00,
+    actualizado_en = '2025-01-15 10:00:00'
+WHERE id = 1; -- Servicios Profesionales + Recursos Propios
+
+-- Columnas en UPDATE: valor_inicial, valor_actual, actualizado_en
+UPDATE item_documento_presupuestal SET 
+    valor_inicial = 150000000.00,
+    valor_actual = 150000000.00,
+    actualizado_en = '2025-01-15 10:00:00'
+WHERE id = 2; -- Servicios Técnicos + Recursos Propios
+
+-- Columnas en UPDATE: valor_inicial, valor_actual, actualizado_en
+UPDATE item_documento_presupuestal SET 
+    valor_inicial = 100000000.00,
+    valor_actual = 100000000.00,
+    actualizado_en = '2025-01-15 10:00:00'
+WHERE id = 3; -- Servicios Profesionales + SGP
+
+-- Columnas en UPDATE: valor_inicial, valor_actual, actualizado_en
+UPDATE item_documento_presupuestal SET 
+    valor_inicial = 50000000.00,
+    valor_actual = 50000000.00,
+    actualizado_en = '2025-01-15 10:00:00'
+WHERE id = 4; -- Servicios Técnicos + SGP
+```
+
+### 2.8 Estado Después del Paso 2
 
 **Resumen de Disponibilidad:**
 - **Servicios Profesionales + Recursos Propios**: $200,000,000
@@ -167,10 +262,10 @@ INSERT INTO configuracion_codigo_tipo_documento VALUES
 ### 3.3 Creación del CDP
 
 ```sql
--- Documento CDP
+-- Documento CDP (valores iniciales en 0, se llenan por movimientos)
 -- Columnas: id, tipo_documento_id, numero_documento, fecha_documento, fecha_vencimiento, estado_actual, valor_total_inicial, valor_total_actual, observaciones, usuario_creacion_id, usuario_aprobacion_id, fecha_aprobacion, metadatos, es_activo, creado_en, actualizado_en
 INSERT INTO documento_presupuestal VALUES 
-(2, 2, 'CDP-2025-001', '2025-02-15', '2025-05-15', 'EXPEDIDO', 180000000.00, 180000000.00, 
+(2, 2, 'CDP-2025-001', '2025-02-15', '2025-05-15', 'EXPEDIDO', 0.00, 0.00, 
  'CDP para contratación de consultoría fortalecimiento institucional', 3, NULL, NULL, 
  '{"proceso": "LP-001-2025", "objeto": "Consultoría fortalecimiento institucional"}', 
  true, '2025-02-15 09:00:00', '2025-02-15 09:00:00');
@@ -179,17 +274,17 @@ INSERT INTO documento_presupuestal VALUES
 ### 3.4 Ítems del CDP
 
 ```sql
--- Ítem 1 CDP: Servicios Profesionales con Recursos Propios
+-- Ítem 1 CDP: Servicios Profesionales con Recursos Propios (valores iniciales en 0)
 -- Columnas: id, documento_id, numero_item, descripcion_item, valor_inicial, valor_actual, item_origen_id, metadatos_item, es_activo, creado_en, actualizado_en
 INSERT INTO item_documento_presupuestal VALUES 
-(5, 2, 1, 'Consultoría fortalecimiento - Fase 1', 120000000.00, 120000000.00, 
+(5, 2, 1, 'Consultoría fortalecimiento - Fase 1', 0.00, 0.00, 
  1, '{"fase": "1", "descripcion": "Diagnóstico y formulación estratégica"}', 
  true, '2025-02-15 09:00:00', '2025-02-15 09:00:00');
 
--- Ítem 2 CDP: Servicios Profesionales con SGP
+-- Ítem 2 CDP: Servicios Profesionales con SGP (valores iniciales en 0)
 -- Columnas: id, documento_id, numero_item, descripcion_item, valor_inicial, valor_actual, item_origen_id, metadatos_item, es_activo, creado_en, actualizado_en
 INSERT INTO item_documento_presupuestal VALUES 
-(6, 2, 2, 'Consultoría fortalecimiento - Fase 2', 60000000.00, 60000000.00, 
+(6, 2, 2, 'Consultoría fortalecimiento - Fase 2', 0.00, 0.00, 
  3, '{"fase": "2", "descripcion": "Implementación y seguimiento"}', 
  true, '2025-02-15 09:00:00', '2025-02-15 09:00:00');
 ```
@@ -210,30 +305,77 @@ INSERT INTO codificacion_item_presupuestal VALUES
 (12, 6, 2, 21, '2025-02-15 09:00:00', '2025-02-15 09:00:00'); -- Fuente: SGP
 ```
 
-### 3.6 Relación CDP con PG
+### 3.6 Movimiento de Afectación del CDP
+
+```sql
+-- Movimiento de afectación presupuestal (consume saldo del PG)
+-- Columnas: id, numero_movimiento, tipo_movimiento, documento_origen_id, documento_destino_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
+INSERT INTO movimiento_presupuestal VALUES 
+(2, 'MOV-2025-002', 'AFECTACION_CDP', 1, 2, 180000000.00, '2025-02-15', 
+ 'Afectación presupuestal para CDP consultoría fortalecimiento institucional', 'CDP-2025-001', 3, '2025-02-15 09:00:00', 
+ 'APROBADO', true, '2025-02-15 09:00:00', '2025-02-15 09:00:00');
+```
+
+### 3.7 Detalle de Movimientos por Ítem - CDP
+
+```sql
+-- Detalle del movimiento por ítems - Afectación CDP
+-- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_item VALUES 
+(5, 2, 1, 5, 120000000.00, 'Afectación: Servicios Profesionales RP -> CDP Fase 1', 
+ '2025-02-15 09:00:00', '2025-02-15 09:00:00'),
+(6, 2, 3, 6, 60000000.00, 'Afectación: Servicios Profesionales SGP -> CDP Fase 2', 
+ '2025-02-15 09:00:00', '2025-02-15 09:00:00');
+```
+
+### 3.8 Relación CDP con PG
 
 ```sql
 -- Relaciones del CDP con el PG
 -- Columnas: id, documento_origen_id, documento_destino_id, tipo_relacion, valor_relacion, porcentaje_relacion, metadatos_relacion, fecha_relacion, es_activo, creado_en, actualizado_en
 INSERT INTO relacion_documento_presupuestal VALUES 
 (1, 1, 2, 'ORIGINA', 180000000.00, 36.00, 
- '{"tipo_operacion": "RESERVA", "conceptos": ["Servicios Profesionales RP", "Servicios Profesionales SGP"]}', 
+ '{"tipo_operacion": "RESERVA", "conceptos": ["Servicios Profesionales RP", "Servicios Profesionales SGP"], "movimiento_id": 2}', 
  '2025-02-15', true, '2025-02-15 09:00:00', '2025-02-15 09:00:00');
 ```
 
-### 3.7 Estado Después del Paso 3
+### 3.9 Estado Después del Paso 3
 
-**Actualización de Saldos PG:**
+**Actualización Automática por Movimiento:**
 ```sql
--- Actualizar saldos del PG después del CDP
+-- Actualizar valores del CDP después del movimiento
+-- Columnas en UPDATE: valor_total_inicial, valor_total_actual, actualizado_en
+UPDATE documento_presupuestal SET 
+    valor_total_inicial = 180000000.00,
+    valor_total_actual = 180000000.00,
+    actualizado_en = '2025-02-15 09:00:00'
+WHERE id = 2; -- CDP-2025-001
+
+-- Actualizar ítems del CDP después del movimiento
+-- Columnas en UPDATE: valor_inicial, valor_actual, actualizado_en
+UPDATE item_documento_presupuestal SET 
+    valor_inicial = 120000000.00,
+    valor_actual = 120000000.00,
+    actualizado_en = '2025-02-15 09:00:00'
+WHERE id = 5; -- Ítem 1 CDP
+
+-- Columnas en UPDATE: valor_inicial, valor_actual, actualizado_en
+UPDATE item_documento_presupuestal SET 
+    valor_inicial = 60000000.00,
+    valor_actual = 60000000.00,
+    actualizado_en = '2025-02-15 09:00:00'
+WHERE id = 6; -- Ítem 2 CDP
+
+-- Reducir disponibilidad del PG automáticamente
 -- Columnas en UPDATE: valor_actual, actualizado_en
 UPDATE item_documento_presupuestal SET 
-    valor_actual = 80000000.00,  -- $200M - $120M = $80M
+    valor_actual = valor_actual - 120000000.00,  -- $200M - $120M = $80M
     actualizado_en = '2025-02-15 09:00:00'
 WHERE id = 1; -- Servicios Profesionales + Recursos Propios
 
+-- Columnas en UPDATE: valor_actual, actualizado_en
 UPDATE item_documento_presupuestal SET 
-    valor_actual = 40000000.00,  -- $100M - $60M = $40M
+    valor_actual = valor_actual - 60000000.00,  -- $100M - $60M = $40M
     actualizado_en = '2025-02-15 09:00:00'
 WHERE id = 3; -- Servicios Profesionales + SGP
 ```
@@ -268,10 +410,10 @@ INSERT INTO configuracion_codigo_tipo_documento VALUES
 ### 4.3 Creación del RP
 
 ```sql
--- Documento RP
+-- Documento RP (valores iniciales en 0, se llenan por movimientos)
 -- Columnas: id, tipo_documento_id, numero_documento, fecha_documento, fecha_vencimiento, estado_actual, valor_total_inicial, valor_total_actual, observaciones, usuario_creacion_id, usuario_aprobacion_id, fecha_aprobacion, metadatos, es_activo, creado_en, actualizado_en
 INSERT INTO documento_presupuestal VALUES 
-(3, 3, 'RP-2025-001', '2025-03-01', NULL, 'EXPEDIDO', 120000000.00, 120000000.00, 
+(3, 3, 'RP-2025-001', '2025-03-01', NULL, 'EXPEDIDO', 0.00, 0.00, 
  'RP para contrato consultoría fortalecimiento institucional', 4, 5, '2025-03-01 10:30:00', 
  '{"contrato": "CNT-2025-001", "contratista": "Consultores Asociados SAS", "plazo": "6 meses"}', 
  true, '2025-03-01 10:00:00', '2025-03-01 10:30:00');
@@ -280,17 +422,17 @@ INSERT INTO documento_presupuestal VALUES
 ### 4.4 Ítems del RP
 
 ```sql
--- Ítem 1 RP: Servicios Profesionales con Recursos Propios (distribución proporcional)
+-- Ítem 1 RP: Servicios Profesionales con Recursos Propios (valores iniciales en 0)
 -- Columnas: id, documento_id, numero_item, descripcion_item, valor_inicial, valor_actual, item_origen_id, metadatos_item, es_activo, creado_en, actualizado_en
 INSERT INTO item_documento_presupuestal VALUES 
-(7, 3, 1, 'Contrato consultoría - Recursos Propios', 80000000.00, 80000000.00, 
+(7, 3, 1, 'Contrato consultoría - Recursos Propios', 0.00, 0.00, 
  5, '{"contrato": "CNT-2025-001", "porcentaje_cdp": 66.67}', 
  true, '2025-03-01 10:00:00', '2025-03-01 10:00:00');
 
--- Ítem 2 RP: Servicios Profesionales con SGP (distribución proporcional)
+-- Ítem 2 RP: Servicios Profesionales con SGP (valores iniciales en 0)
 -- Columnas: id, documento_id, numero_item, descripcion_item, valor_inicial, valor_actual, item_origen_id, metadatos_item, es_activo, creado_en, actualizado_en
 INSERT INTO item_documento_presupuestal VALUES 
-(8, 3, 2, 'Contrato consultoría - SGP', 40000000.00, 40000000.00, 
+(8, 3, 2, 'Contrato consultoría - SGP', 0.00, 0.00, 
  6, '{"contrato": "CNT-2025-001", "porcentaje_cdp": 66.67}', 
  true, '2025-03-01 10:00:00', '2025-03-01 10:00:00');
 ```
@@ -311,38 +453,87 @@ INSERT INTO codificacion_item_presupuestal VALUES
 (16, 8, 2, 21, '2025-03-01 10:00:00', '2025-03-01 10:00:00'); -- Fuente: SGP
 ```
 
-### 4.6 Relación RP con CDP
+### 4.6 Movimiento de Afectación del RP
+
+```sql
+-- Movimiento de afectación presupuestal (consume saldo del CDP)
+-- Columnas: id, numero_movimiento, tipo_movimiento, documento_origen_id, documento_destino_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
+INSERT INTO movimiento_presupuestal VALUES 
+(3, 'MOV-2025-003', 'AFECTACION_RP', 2, 3, 120000000.00, '2025-03-01', 
+ 'Afectación presupuestal para RP contrato consultoría', 'RP-2025-001', 4, '2025-03-01 10:30:00', 
+ 'APROBADO', true, '2025-03-01 10:00:00', '2025-03-01 10:30:00');
+```
+
+### 4.7 Detalle de Movimientos por Ítem - RP
+
+```sql
+-- Detalle del movimiento por ítems - Afectación RP
+-- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_item VALUES 
+(7, 3, 5, 7, 80000000.00, 'Afectación: CDP Fase 1 -> RP Recursos Propios', 
+ '2025-03-01 10:00:00', '2025-03-01 10:00:00'),
+(8, 3, 6, 8, 40000000.00, 'Afectación: CDP Fase 2 -> RP SGP', 
+ '2025-03-01 10:00:00', '2025-03-01 10:00:00');
+```
+
+### 4.8 Relación RP con CDP
+
+### 4.8 Relación RP con CDP
 
 ```sql
 -- Relación del RP con el CDP
 -- Columnas: id, documento_origen_id, documento_destino_id, tipo_relacion, valor_relacion, porcentaje_relacion, metadatos_relacion, fecha_relacion, es_activo, creado_en, actualizado_en
 INSERT INTO relacion_documento_presupuestal VALUES 
 (2, 2, 3, 'INCORPORA', 120000000.00, 66.67, 
- '{"tipo_operacion": "COMPROMISO", "contrato": "CNT-2025-001", "adjudicacion": "2025-02-28"}', 
+ '{"tipo_operacion": "COMPROMISO", "contrato": "CNT-2025-001", "adjudicacion": "2025-02-28", "movimiento_id": 3}', 
  '2025-03-01', true, '2025-03-01 10:00:00', '2025-03-01 10:00:00');
 ```
 
-### 4.7 Estado Después del Paso 4
+### 4.9 Estado Después del Paso 4
 
-**Actualización de Estados:**
+**Actualización Automática por Movimiento:**
 ```sql
--- CDP cambia a COMPROMETIDO parcialmente
+-- Actualizar valores del RP después del movimiento
+-- Columnas en UPDATE: valor_total_inicial, valor_total_actual, actualizado_en
+UPDATE documento_presupuestal SET 
+    valor_total_inicial = 120000000.00,
+    valor_total_actual = 120000000.00,
+    actualizado_en = '2025-03-01 10:30:00'
+WHERE id = 3; -- RP-2025-001
+
+-- Actualizar ítems del RP después del movimiento
+-- Columnas en UPDATE: valor_inicial, valor_actual, actualizado_en
+UPDATE item_documento_presupuestal SET 
+    valor_inicial = 80000000.00,
+    valor_actual = 80000000.00,
+    actualizado_en = '2025-03-01 10:30:00'
+WHERE id = 7; -- Ítem 1 RP
+
+-- Columnas en UPDATE: valor_inicial, valor_actual, actualizado_en
+UPDATE item_documento_presupuestal SET 
+    valor_inicial = 40000000.00,
+    valor_actual = 40000000.00,
+    actualizado_en = '2025-03-01 10:30:00'
+WHERE id = 8; -- Ítem 2 RP
+
+-- Reducir disponibilidad del CDP automáticamente
 -- Columnas en UPDATE: estado_actual, valor_actual, actualizado_en
 UPDATE documento_presupuestal SET 
     estado_actual = 'COMPROMETIDO',
-    valor_actual = 60000000.00,  -- $180M - $120M = $60M disponible
+    valor_actual = valor_actual - 120000000.00,  -- $180M - $120M = $60M disponible
     actualizado_en = '2025-03-01 10:30:00'
 WHERE id = 2; -- CDP-2025-001
 
 -- Actualizar ítems del CDP
 -- Columnas en UPDATE: valor_actual, actualizado_en
 UPDATE item_documento_presupuestal SET 
-    valor_actual = 40000000.00,  -- $120M - $80M = $40M disponible
+    valor_actual = valor_actual - 80000000.00,  -- $120M - $80M = $40M disponible
     actualizado_en = '2025-03-01 10:30:00'
 WHERE id = 5; -- Ítem 1 CDP
 
+-- Columnas en UPDATE: valor_actual, actualizado_en
 UPDATE item_documento_presupuestal SET 
-    valor_actual = 20000000.00,  -- $60M - $40M = $20M disponible
+    valor_actual = valor_actual - 40000000.00,  -- $60M - $40M = $20M disponible
     actualizado_en = '2025-03-01 10:30:00'
 WHERE id = 6; -- Ítem 2 CDP
 ```
@@ -376,10 +567,10 @@ INSERT INTO configuracion_codigo_tipo_documento VALUES
 ### 5.3 Creación de la Orden de Pago
 
 ```sql
--- Documento OP
+-- Documento OP (valores iniciales en 0, se llenan por movimientos)
 -- Columnas: id, tipo_documento_id, numero_documento, fecha_documento, fecha_vencimiento, estado_actual, valor_total_inicial, valor_total_actual, observaciones, usuario_creacion_id, usuario_aprobacion_id, fecha_aprobacion, metadatos, es_activo, creado_en, actualizado_en
 INSERT INTO documento_presupuestal VALUES 
-(4, 4, 'OP-2025-001', '2025-04-15', NULL, 'EXPEDIDO', 60000000.00, 60000000.00, 
+(4, 4, 'OP-2025-001', '2025-04-15', NULL, 'EXPEDIDO', 0.00, 0.00, 
  'Orden de pago primer avance contrato consultoría', 6, 7, '2025-04-15 14:30:00', 
  '{"contrato": "CNT-2025-001", "tipo_pago": "PRIMER_AVANCE", "porcentaje": 50, "factura": "FC-001"}', 
  true, '2025-04-15 14:00:00', '2025-04-15 14:30:00');
@@ -388,17 +579,17 @@ INSERT INTO documento_presupuestal VALUES
 ### 5.4 Ítems de la Orden de Pago
 
 ```sql
--- Ítem 1 OP: Servicios Profesionales con Recursos Propios
+-- Ítem 1 OP: Servicios Profesionales con Recursos Propios (valores iniciales en 0)
 -- Columnas: id, documento_id, numero_item, descripcion_item, valor_inicial, valor_actual, item_origen_id, metadatos_item, es_activo, creado_en, actualizado_en
 INSERT INTO item_documento_presupuestal VALUES 
-(9, 4, 1, 'Primer pago contrato - Recursos Propios', 40000000.00, 40000000.00, 
+(9, 4, 1, 'Primer pago contrato - Recursos Propios', 0.00, 0.00, 
  7, '{"contrato": "CNT-2025-001", "porcentaje_rp": 50}', 
  true, '2025-04-15 14:00:00', '2025-04-15 14:00:00');
 
--- Ítem 2 OP: Servicios Profesionales con SGP
+-- Ítem 2 OP: Servicios Profesionales con SGP (valores iniciales en 0)
 -- Columnas: id, documento_id, numero_item, descripcion_item, valor_inicial, valor_actual, item_origen_id, metadatos_item, es_activo, creado_en, actualizado_en
 INSERT INTO item_documento_presupuestal VALUES 
-(10, 4, 2, 'Primer pago contrato - SGP', 20000000.00, 20000000.00, 
+(10, 4, 2, 'Primer pago contrato - SGP', 0.00, 0.00, 
  8, '{"contrato": "CNT-2025-001", "porcentaje_rp": 50}', 
  true, '2025-04-15 14:00:00', '2025-04-15 14:00:00');
 ```
@@ -419,39 +610,87 @@ INSERT INTO codificacion_item_presupuestal VALUES
 (20, 10, 2, 21, '2025-04-15 14:00:00', '2025-04-15 14:00:00'); -- Fuente: SGP
 ```
 
-### 5.6 Relación OP con RP
+### 5.6 Movimiento de Afectación de la OP
+
+```sql
+-- Movimiento de afectación presupuestal (consume saldo del RP)
+-- Columnas: id, numero_movimiento, tipo_movimiento, documento_origen_id, documento_destino_id, valor_movimiento, fecha_movimiento, observaciones, documento_soporte, usuario_id, fecha_aprobacion, estado, es_activo, creado_en, actualizado_en
+INSERT INTO movimiento_presupuestal VALUES 
+(4, 'MOV-2025-004', 'AFECTACION_OP', 3, 4, 60000000.00, '2025-04-15', 
+ 'Afectación presupuestal para OP primer avance contrato', 'OP-2025-001', 6, '2025-04-15 14:30:00', 
+ 'APROBADO', true, '2025-04-15 14:00:00', '2025-04-15 14:30:00');
+```
+
+### 5.7 Detalle de Movimientos por Ítem - OP
+
+```sql
+-- Detalle del movimiento por ítems - Afectación OP
+-- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
+INSERT INTO detalle_movimiento_item VALUES 
+(9, 4, 7, 9, 40000000.00, 'Afectación: RP Recursos Propios -> OP Primer pago', 
+ '2025-04-15 14:00:00', '2025-04-15 14:00:00'),
+(10, 4, 8, 10, 20000000.00, 'Afectación: RP SGP -> OP Primer pago', 
+ '2025-04-15 14:00:00', '2025-04-15 14:00:00');
+```
+
+### 5.8 Relación OP con RP
+
+### 5.8 Relación OP con RP
 
 ```sql
 -- Relación de la OP con el RP
 -- Columnas: id, documento_origen_id, documento_destino_id, tipo_relacion, valor_relacion, porcentaje_relacion, metadatos_relacion, fecha_relacion, es_activo, creado_en, actualizado_en
 INSERT INTO relacion_documento_presupuestal VALUES 
 (3, 3, 4, 'INCORPORA', 60000000.00, 50.00, 
- '{"tipo_operacion": "OBLIGACION", "factura": "FC-001", "acta": "AR-001"}', 
+ '{"tipo_operacion": "OBLIGACION", "factura": "FC-001", "acta": "AR-001", "movimiento_id": 4}', 
  '2025-04-15', true, '2025-04-15 14:00:00', '2025-04-15 14:00:00');
 ```
 
-### 5.7 Estado Después del Paso 5
+### 5.9 Estado Después del Paso 5
 
-**Actualización de Estados:**
+**Actualización Automática por Movimiento:**
 ```sql
--- RP cambia a OBLIGADO parcialmente
+-- Actualizar valores de la OP después del movimiento
+-- Columnas en UPDATE: valor_total_inicial, valor_total_actual, actualizado_en
+UPDATE documento_presupuestal SET 
+    valor_total_inicial = 60000000.00,
+    valor_total_actual = 60000000.00,
+    actualizado_en = '2025-04-15 14:30:00'
+WHERE id = 4; -- OP-2025-001
+
+-- Actualizar ítems de la OP después del movimiento
+-- Columnas en UPDATE: valor_inicial, valor_actual, actualizado_en
+UPDATE item_documento_presupuestal SET 
+    valor_inicial = 40000000.00,
+    valor_actual = 40000000.00,
+    actualizado_en = '2025-04-15 14:30:00'
+WHERE id = 9; -- Ítem 1 OP
+
+-- Columnas en UPDATE: valor_inicial, valor_actual, actualizado_en
+UPDATE item_documento_presupuestal SET 
+    valor_inicial = 20000000.00,
+    valor_actual = 20000000.00,
+    actualizado_en = '2025-04-15 14:30:00'
+WHERE id = 10; -- Ítem 2 OP
+
+-- Reducir disponibilidad del RP automáticamente
 -- Columnas en UPDATE: estado_actual, valor_actual, actualizado_en
 UPDATE documento_presupuestal SET 
     estado_actual = 'OBLIGADO',
-    valor_actual = 60000000.00,  -- $120M - $60M = $60M por pagar
+    valor_actual = valor_actual - 60000000.00,  -- $120M - $60M = $60M por pagar
     actualizado_en = '2025-04-15 14:30:00'
 WHERE id = 3; -- RP-2025-001
 
 -- Actualizar ítems del RP
 -- Columnas en UPDATE: valor_actual, actualizado_en
 UPDATE item_documento_presupuestal SET 
-    valor_actual = 40000000.00,  -- $80M - $40M = $40M por pagar
+    valor_actual = valor_actual - 40000000.00,  -- $80M - $40M = $40M por pagar
     actualizado_en = '2025-04-15 14:30:00'
 WHERE id = 7; -- Ítem 1 RP
 
 -- Columnas en UPDATE: valor_actual, actualizado_en
 UPDATE item_documento_presupuestal SET 
-    valor_actual = 20000000.00,  -- $40M - $20M = $20M por pagar
+    valor_actual = valor_actual - 20000000.00,  -- $40M - $20M = $20M por pagar
     actualizado_en = '2025-04-15 14:30:00'
 WHERE id = 8; -- Ítem 2 RP
 ```
@@ -503,7 +742,7 @@ INSERT INTO detalle_movimiento_item VALUES
 
 ### 6.4 Estado Final Después del Paso 6
 
-**Actualización de Estados:**
+**Actualización Automática por Movimiento de Liberación:**
 ```sql
 -- CDP cambia a LIBERADO parcialmente
 -- Columnas en UPDATE: estado_actual, valor_actual, actualizado_en
@@ -520,7 +759,7 @@ UPDATE item_documento_presupuestal SET
     actualizado_en = '2025-05-10 16:00:00'
 WHERE id IN (5, 6); -- Ambos ítems del CDP
 
--- Restaurar disponibilidad en el PG
+-- Restaurar disponibilidad en el PG automáticamente por movimiento inverso
 -- Columnas en UPDATE: valor_actual, actualizado_en
 UPDATE item_documento_presupuestal SET 
     valor_actual = valor_actual + 40000000.00,  -- $80M + $40M = $120M
@@ -597,3 +836,55 @@ ORDER BY rd.fecha_relacion;
 ```
 
 Este ejemplo demuestra cómo el sistema maneja la flexibilidad real del manejo presupuestal, permitiendo compromisos parciales, liberaciones y manteniendo la trazabilidad completa en todo momento.
+
+---
+
+## DIAGRAMA DE FLUJO DE MOVIMIENTOS
+
+```
+APROPIACION_INICIAL (MOV-001)
+    ↓ $500M
+PG-2025-001 ($500M disponible)
+    ↓ AFECTACION_CDP (MOV-002)
+    ↓ $180M
+CDP-2025-001 ($180M disponible)
+    ├── AFECTACION_RP (MOV-003)
+    │   ↓ $120M
+    │   RP-2025-001 ($120M disponible)
+    │       ↓ AFECTACION_OP (MOV-004)
+    │       ↓ $60M
+    │       OP-2025-001 ($60M disponible)
+    │
+    └── LIBERACION (MOV-005)
+        ↓ $60M (devuelto)
+        PG-2025-001 (saldo restaurado)
+```
+
+## PRINCIPIOS DE CONSISTENCIA
+
+### 1. **Atomicidad de Movimientos**
+Cada movimiento es una operación atómica que:
+- Actualiza el documento destino (+)
+- Actualiza el documento origen (-)
+- Registra la trazabilidad completa
+- Mantiene la consistencia de saldos
+
+### 2. **Cadena de Afectaciones**
+```sql
+-- Ejemplo de cadena completa:
+PG (Ítem 1): $200M → $80M → $120M (después liberación)
+CDP (Ítem 1): $0 → $120M → $40M → $0 (después liberación)
+RP (Ítem 1): $0 → $80M → $40M (después obligación)
+OP (Ítem 1): $0 → $40M (pendiente de pago)
+```
+
+### 3. **Integridad Referencial**
+- Cada movimiento referencia documentos origen y destino
+- Los detalles de movimiento mapean ítems específicos
+- Las relaciones entre documentos incluyen el ID del movimiento
+- Los metadatos incluyen información de trazabilidad
+
+### 4. **Reversibilidad**
+- Los movimientos de liberación revierten automáticamente las afectaciones
+- Se mantiene el historial completo de todos los movimientos
+- Los estados se pueden recalcular desde el historial de movimientos
