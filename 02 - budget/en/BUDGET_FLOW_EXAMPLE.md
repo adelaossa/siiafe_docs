@@ -192,31 +192,88 @@ INSERT INTO budget_item_coding VALUES
 (12, 6, 2, 21, '2025-02-15 09:00:00', '2025-02-15 09:00:00'); -- Source: SGP
 ```
 
-### 3.6 CDP Relationship with PG
+### 3.6 CDP Affectation Movements (With Automatic Counterparts)
 
 ```sql
--- CDP relationships with PG
+-- SINGLE MOVEMENT: CDP Issuance with automatic counterpart
+-- Columns: id, movement_number, movement_type_id, document_origin_id, total_movement_value, movement_date, observations, document_support, user_id, approval_date, status, is_active, created_at, updated_at
+INSERT INTO budget_movement VALUES 
+(2, 'MOV-2025-002', 8, 2, 180000000.00, '2025-02-15', 
+ 'CDP-2025-001 issuance with automatic PG affectation', 'CDP-2025-001', 3, '2025-02-15 09:30:00', 
+ 'APPROVED', true, '2025-02-15 09:00:00', '2025-02-15 09:30:00');
+
+-- LINE 1: Increase in CDP (main movement)
+-- Columns: id, movement_id, line_number, movement_type_id, affected_document_id, line_value, line_observations, is_active, created_at, updated_at
+INSERT INTO budget_movement_detail VALUES 
+(2, 2, 1, 8, 2, 180000000.00, 'Initial value of CDP-2025-001', 
+ true, '2025-02-15 09:00:00', '2025-02-15 09:30:00');
+
+-- LINE 2: Reduction in PG (automatic counterpart)
+-- Columns: id, movement_id, line_number, movement_type_id, affected_document_id, line_value, line_observations, is_active, created_at, updated_at
+INSERT INTO budget_movement_detail VALUES 
+(3, 2, 2, 7, 1, 180000000.00, 'Automatic counterpart: PG affectation by CDP-2025-001', 
+ true, '2025-02-15 09:00:00', '2025-02-15 09:30:00');
+ 
+-- Note: movement_type_id = 8 'INITIAL_CDP_VALUE' automatically generates type_id = 7 'CDP_AFFECTATION'
+-- Note: Single movement (MOV-2025-002) with two lines affecting different documents
+```
+
+### 3.7 Movement Item Detail - CDP
+
+```sql
+-- Item detail for CDP movement (MOV-002)
+-- Columns: id, movement_id, item_id, target_item_id, detail_value, observations, created_at, updated_at
+INSERT INTO movement_item_detail VALUES 
+-- Items affected in CDP (line 1 of movement)
+(3, 2, 5, 1, 120000000.00, 'CDP Own Resources from PG Phase 1', 
+ '2025-02-15 09:00:00', '2025-02-15 09:00:00'),
+(4, 2, 6, 3, 60000000.00, 'CDP SGP from PG Phase 2', 
+ '2025-02-15 09:00:00', '2025-02-15 09:00:00'),
+
+-- Items affected in PG (line 2 of movement - counterpart)
+(5, 2, 1, NULL, 120000000.00, 'Reduction: PG Phase 1 by CDP', 
+ '2025-02-15 09:00:00', '2025-02-15 09:00:00'),
+(6, 2, 3, NULL, 60000000.00, 'Reduction: PG Phase 2 by CDP', 
+ '2025-02-15 09:00:00', '2025-02-15 09:00:00');
+
+-- Note: Both movement lines share the same item detail
+-- Note: target_item_id indicates source item when it's a transfer
+```
+
+### 3.8 CDP Relationship with PG
+
+```sql
+-- CDP relationship with PG (single movement with counterpart)
+-- Columns: id, document_origin_id, document_target_id, relation_type, relation_value, relation_percentage, relation_metadata, relation_date, is_active, created_at, updated_at
 INSERT INTO budget_document_relation VALUES 
 (1, 1, 2, 'ORIGINATES', 180000000.00, 36.00, 
- '{"operation_type": "RESERVE", "concepts": ["Professional Services OR", "Professional Services SGP"]}', 
+ '{"operation_type": "RESERVE", "concepts": ["Professional Services OR", "Professional Services SGP"], "movement_id": 2, "lines": [1, 2]}', 
  '2025-02-15', true, '2025-02-15 09:00:00', '2025-02-15 09:00:00');
+ 
+-- Note: relation_metadata includes the unique movement ID and its composing lines
 ```
 
-### 3.7 State After Step 3
+### 3.9 State After Step 3
 
-**PG Balance Update:**
+**Automatic Update by Movement:**
 ```sql
 -- Update PG balances after CDP
+-- Columns in UPDATE: current_value, updated_at
 UPDATE budget_document_item SET 
     current_value = 80000000.00,  -- $200M - $120M = $80M
-    updated_at = '2025-02-15 09:00:00'
+    updated_at = '2025-03-01 10:30:00'
 WHERE id = 1; -- Professional Services + Own Resources
 
+-- Columns in UPDATE: current_value, updated_at
 UPDATE budget_document_item SET 
     current_value = 40000000.00,  -- $100M - $60M = $40M
-    updated_at = '2025-02-15 09:00:00'
+    updated_at = '2025-03-01 10:30:00'
 WHERE id = 3; -- Professional Services + SGP
 ```
+
+**State Summary:**
+- **PG**: $500,000,000 total, $320,000,000 available
+- **CDP**: $180,000,000 total, $180,000,000 available
 
 **Availability Summary:**
 - **Professional Services + Own Resources**: $80,000,000 (reserved: $120,000,000)
@@ -285,21 +342,73 @@ INSERT INTO budget_item_coding VALUES
 (16, 8, 2, 21, '2025-03-01 10:00:00', '2025-03-01 10:00:00'); -- Source: SGP
 ```
 
-### 4.6 RP Relationship with CDP
+### 4.6 RP Affectation Movements (With Automatic Counterparts)
 
 ```sql
--- RP relationship with CDP
-INSERT INTO budget_document_relation VALUES 
-(2, 2, 3, 'INCORPORATES', 120000000.00, 66.67, 
- '{"operation_type": "COMMITMENT", "contract": "CNT-2025-001", "award": "2025-02-28"}', 
- '2025-03-01', true, '2025-03-01 10:00:00', '2025-03-01 10:00:00');
+-- SINGLE MOVEMENT: RP Issuance with automatic counterpart
+-- Columns: id, movement_number, movement_type_id, document_origin_id, total_movement_value, movement_date, observations, document_support, user_id, approval_date, status, is_active, created_at, updated_at
+INSERT INTO budget_movement VALUES 
+(3, 'MOV-2025-003', 11, 3, 120000000.00, '2025-03-01', 
+ 'RP-2025-001 issuance with automatic CDP-2025-001 affectation', 'RP-2025-001', 4, '2025-03-01 10:30:00', 
+ 'APPROVED', true, '2025-03-01 10:00:00', '2025-03-01 10:30:00');
+
+-- LINE 1: Increase in RP (main movement)
+-- Columns: id, movement_id, line_number, movement_type_id, affected_document_id, line_value, line_observations, is_active, created_at, updated_at
+INSERT INTO budget_movement_detail VALUES 
+(4, 3, 1, 11, 3, 120000000.00, 'Initial value of RP-2025-001', 
+ true, '2025-03-01 10:00:00', '2025-03-01 10:30:00');
+
+-- LINE 2: Reduction in CDP (automatic counterpart)
+-- Columns: id, movement_id, line_number, movement_type_id, affected_document_id, line_value, line_observations, is_active, created_at, updated_at
+INSERT INTO budget_movement_detail VALUES 
+(5, 3, 2, 10, 2, 120000000.00, 'Automatic counterpart: CDP-2025-001 availability reduction', 
+ true, '2025-03-01 10:00:00', '2025-03-01 10:30:00');
+ 
+-- Note: movement_type_id = 11 'INITIAL_RP_VALUE' automatically generates type_id = 10 'AVAILABILITY_REDUCTION'
+-- Note: Single movement (MOV-2025-003) with two lines affecting different documents
 ```
 
-### 4.7 State After Step 4
+### 4.7 Movement Item Detail - RP
 
-**State Updates:**
+```sql
+-- Item detail for RP movement (MOV-003)
+-- Columns: id, movement_id, item_id, target_item_id, detail_value, observations, created_at, updated_at
+INSERT INTO movement_item_detail VALUES 
+-- Items affected in RP (line 1 of movement)
+(9, 3, 7, 5, 80000000.00, 'RP Own Resources from CDP Phase 1', 
+ '2025-03-01 10:00:00', '2025-03-01 10:00:00'),
+(10, 3, 8, 6, 40000000.00, 'RP SGP from CDP Phase 2', 
+ '2025-03-01 10:00:00', '2025-03-01 10:00:00'),
+
+-- Items affected in CDP (line 2 of movement - counterpart)
+(11, 3, 5, NULL, 80000000.00, 'Reduction: CDP Phase 1 by RP', 
+ '2025-03-01 10:00:00', '2025-03-01 10:00:00'),
+(12, 3, 6, NULL, 40000000.00, 'Reduction: CDP Phase 2 by RP', 
+ '2025-03-01 10:00:00', '2025-03-01 10:00:00');
+
+-- Note: Both movement lines share the same item detail
+-- Note: target_item_id indicates source item when it's a transfer
+```
+
+### 4.8 RP Relationship with CDP
+
+```sql
+-- RP relationship with CDP (single movement with counterpart)
+-- Columns: id, document_origin_id, document_target_id, relation_type, relation_value, relation_percentage, relation_metadata, relation_date, is_active, created_at, updated_at
+INSERT INTO budget_document_relation VALUES 
+(2, 2, 3, 'INCORPORATES', 120000000.00, 66.67, 
+ '{"operation_type": "COMMITMENT", "contract": "CNT-2025-001", "award": "2025-02-28", "movement_id": 3, "lines": [1, 2]}', 
+ '2025-03-01', true, '2025-03-01 10:00:00', '2025-03-01 10:00:00');
+ 
+-- Note: relation_metadata includes the unique movement ID and its composing lines
+```
+
+### 4.9 State After Step 4
+
+**Automatic Update by Movement:**
 ```sql
 -- CDP changes to partially COMMITTED
+-- Columns in UPDATE: current_state, current_total_value, updated_at
 UPDATE budget_document SET 
     current_state = 'COMMITTED',
     current_total_value = 60000000.00,  -- $180M - $120M = $60M available
@@ -307,11 +416,13 @@ UPDATE budget_document SET
 WHERE id = 2; -- CDP-2025-001
 
 -- Update CDP items
+-- Columns in UPDATE: current_value, updated_at
 UPDATE budget_document_item SET 
     current_value = 40000000.00,  -- $120M - $80M = $40M available
     updated_at = '2025-03-01 10:30:00'
 WHERE id = 5; -- CDP Item 1
 
+-- Columns in UPDATE: current_value, updated_at
 UPDATE budget_document_item SET 
     current_value = 20000000.00,  -- $60M - $40M = $20M available
     updated_at = '2025-03-01 10:30:00'
@@ -504,7 +615,7 @@ WHERE id = 3; -- Professional Services + SGP
 ### Final Availability by Item/Source
 
 | Item/Source | Appropriation | Committed | Obligated | Available |
-|-------------|---------------|-----------|-----------|-----------|
+|-------------|---------------|-----------|-----------|
 | **Professional Services + OR** | $200,000,000 | $80,000,000 | $40,000,000 | $120,000,000 |
 | **Technical Services + OR** | $150,000,000 | $0 | $0 | $150,000,000 |
 | **Professional Services + SGP** | $100,000,000 | $40,000,000 | $20,000,000 | $60,000,000 |
@@ -549,3 +660,292 @@ ORDER BY bd.relation_date;
 ```
 
 This example demonstrates how the system handles real budget management flexibility, allowing partial commitments, releases, and maintaining complete traceability at all times.
+
+---
+
+## CONFIGURATION: Movement Type Normalization
+
+### Movement Type Table
+
+```sql
+-- Master table for movement types
+-- Columns: id, code, name, effect, description, is_active, created_at, updated_at
+CREATE TABLE movement_type (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(200) NOT NULL,
+    effect VARCHAR(20) NOT NULL CHECK (effect IN ('INCREASES', 'REDUCES')),
+    description TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Movement types for General Budget (PG)
+INSERT INTO movement_type VALUES 
+(1, 'INITIAL_APPROPRIATION', 'Initial Appropriation', 'INCREASES', 'Initial budget allocation', true, NOW(), NOW()),
+(2, 'BUDGET_ADDITION', 'Budget Addition', 'INCREASES', 'Budget increase', true, NOW(), NOW()),
+(3, 'BUDGET_REDUCTION', 'Budget Reduction', 'REDUCES', 'Budget decrease', true, NOW(), NOW()),
+(4, 'BUDGET_TRANSFER_SOURCE', 'Budget Transfer - Source', 'REDUCES', 'Transfer movement reducing source item', true, NOW(), NOW()),
+(5, 'BUDGET_TRANSFER_TARGET', 'Budget Transfer - Target', 'INCREASES', 'Transfer movement increasing target item', true, NOW(), NOW()),
+(6, 'AVAILABILITY_RESTORATION', 'Availability Restoration', 'INCREASES', 'Increase due to CDP release', true, NOW(), NOW()),
+(7, 'CDP_AFFECTATION', 'CDP Affectation', 'REDUCES', 'Budget reduction due to CDP issuance', true, NOW(), NOW()),
+
+-- Movement types for Budget Availability Certificate (CDP)
+(8, 'INITIAL_CDP_VALUE', 'Initial CDP Value', 'INCREASES', 'Initial CDP assignment', true, NOW(), NOW()),
+(9, 'CDP_RELEASE', 'CDP Release', 'REDUCES', 'Return of unused resources', true, NOW(), NOW()),
+(10, 'AVAILABILITY_REDUCTION', 'Availability Reduction', 'REDUCES', 'Decrease due to commitments', true, NOW(), NOW()),
+
+-- Movement types for Budget Commitment (RP)
+(11, 'INITIAL_RP_VALUE', 'Initial RP Value', 'INCREASES', 'Initial RP assignment', true, NOW(), NOW()),
+(12, 'COMMITMENT_REDUCTION', 'Commitment Reduction', 'REDUCES', 'Decrease due to obligations', true, NOW(), NOW()),
+(13, 'RP_LIQUIDATION', 'RP Liquidation', 'REDUCES', 'Liquidation and return of unexecuted balance to CDP', true, NOW(), NOW()),
+
+-- Movement types for Payment Order (OP)
+(14, 'INITIAL_OP_VALUE', 'Initial OP Value', 'INCREASES', 'Initial OP assignment', true, NOW(), NOW()),
+
+-- Movement types for CDP Release (as independent document)
+(16, 'INITIAL_CDP_RELEASE_VALUE', 'Initial CDP Release Value', 'INCREASES', 'Initial CDP Release assignment', true, NOW(), NOW()),
+
+-- Movement types for RP Liquidation (as independent document)
+(17, 'INITIAL_RP_LIQUIDATION_VALUE', 'Initial RP Liquidation Value', 'INCREASES', 'Initial RP Liquidation assignment', true, NOW(), NOW()),
+
+-- Movement types for CDP (from RP liquidation)
+(15, 'RESTORATION_BY_RP_LIQUIDATION', 'Restoration by RP Liquidation', 'INCREASES', 'CDP increase due to RP liquidation', true, NOW(), NOW());
+```
+
+### Movement Type - Document Type Relationship
+
+```sql
+-- Table relating movement types to document types
+-- Columns: id, movement_type_id, document_type_id, is_active, created_at, updated_at
+CREATE TABLE movement_type_document_type (
+    id SERIAL PRIMARY KEY,
+    movement_type_id INTEGER NOT NULL REFERENCES movement_type(id),
+    document_type_id INTEGER NOT NULL REFERENCES document_type(id),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(movement_type_id, document_type_id)
+);
+
+-- Movement types for each document type
+INSERT INTO movement_type_document_type VALUES 
+-- General Budget (document_type_id = 1)
+(1, 1, 1, true, NOW(), NOW()),  -- INITIAL_APPROPRIATION
+(2, 2, 1, true, NOW(), NOW()),  -- BUDGET_ADDITION
+(3, 3, 1, true, NOW(), NOW()),  -- BUDGET_REDUCTION
+(4, 4, 1, true, NOW(), NOW()),  -- BUDGET_TRANSFER_SOURCE
+(5, 5, 1, true, NOW(), NOW()),  -- BUDGET_TRANSFER_TARGET
+(6, 6, 1, true, NOW(), NOW()),  -- AVAILABILITY_RESTORATION
+(7, 7, 1, true, NOW(), NOW()),  -- CDP_AFFECTATION
+
+-- Budget Availability Certificate (document_type_id = 2)
+(8, 8, 2, true, NOW(), NOW()),  -- INITIAL_CDP_VALUE
+(9, 9, 2, true, NOW(), NOW()),  -- CDP_RELEASE
+(10, 10, 2, true, NOW(), NOW()), -- AVAILABILITY_REDUCTION
+(11, 15, 2, true, NOW(), NOW()), -- RESTORATION_BY_RP_LIQUIDATION
+
+-- Budget Commitment (document_type_id = 3)
+(12, 11, 3, true, NOW(), NOW()), -- INITIAL_RP_VALUE
+(13, 12, 3, true, NOW(), NOW()), -- COMMITMENT_REDUCTION
+(14, 13, 3, true, NOW(), NOW()), -- RP_LIQUIDATION
+
+-- Payment Order (document_type_id = 4)
+(15, 14, 4, true, NOW(), NOW()), -- INITIAL_OP_VALUE
+
+-- CDP Release (document_type_id = 8)
+(16, 16, 8, true, NOW(), NOW()), -- INITIAL_CDP_RELEASE_VALUE
+
+-- RP Liquidation (document_type_id = 9)
+(17, 17, 9, true, NOW(), NOW()); -- INITIAL_RP_LIQUIDATION_VALUE
+```
+
+-- Note: Document type IDs are assumed as:
+-- 1 = PG, 2 = CDP, 3 = RP, 4 = OP, 5 = Disbursement, 6 = Accounts Payable, 7 = Budget Addition
+-- 8 = CDP Release, 9 = RP Liquidation
+
+### Automatic Counterpart Configuration
+
+```sql
+-- Table defining automatic counterparts for each movement type
+-- Columns: id, main_movement_type_id, counterpart_movement_type_id, execution_order, is_automatic, description, is_active, created_at, updated_at
+CREATE TABLE movement_type_counterpart (
+    id SERIAL PRIMARY KEY,
+    main_movement_type_id INTEGER NOT NULL REFERENCES movement_type(id),
+    counterpart_movement_type_id INTEGER NOT NULL REFERENCES movement_type(id),
+    execution_order INTEGER DEFAULT 1,
+    is_automatic BOOLEAN DEFAULT TRUE,
+    description TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(main_movement_type_id, counterpart_movement_type_id)
+);
+
+-- Automatic counterpart configuration
+INSERT INTO movement_type_counterpart VALUES 
+-- INITIAL_CDP_VALUE (8) automatically generates CDP_AFFECTATION (7)
+(1, 8, 7, 1, true, 'When creating a CDP, PG must be automatically affected', true, NOW(), NOW()),
+
+-- INITIAL_RP_VALUE (11) automatically generates AVAILABILITY_REDUCTION (10)
+(2, 11, 10, 1, true, 'When creating an RP, CDP must be automatically reduced', true, NOW(), NOW()),
+
+-- INITIAL_OP_VALUE (14) automatically generates COMMITMENT_REDUCTION (12)
+(3, 14, 12, 1, true, 'When creating an OP, RP must be automatically reduced', true, NOW(), NOW()),
+
+-- INITIAL_CDP_RELEASE_VALUE (16) automatically generates CDP_RELEASE (9)
+(4, 16, 9, 1, true, 'When creating a CDP Release, CDP must be automatically reduced', true, NOW(), NOW()),
+
+-- INITIAL_RP_LIQUIDATION_VALUE (17) automatically generates RP_LIQUIDATION (13)
+(5, 17, 13, 1, true, 'When creating an RP Liquidation, RP must be automatically reduced', true, NOW(), NOW()),
+
+-- CDP_RELEASE (9) automatically generates AVAILABILITY_RESTORATION (6)
+(6, 9, 6, 1, true, 'When releasing a CDP, PG must be automatically restored', true, NOW(), NOW()),
+
+-- RP_LIQUIDATION (13) automatically generates RESTORATION_BY_RP_LIQUIDATION (15)
+(7, 13, 15, 1, true, 'When liquidating an RP, CDP must be automatically restored', true, NOW(), NOW());
+```
+
+### Function to Create Movements with Automatic Counterparts
+
+```sql
+-- Function to automatically create movement lines with counterparts
+CREATE OR REPLACE FUNCTION create_movement_with_counterparts(
+    p_movement_type_id INTEGER,
+    p_document_origin_id INTEGER,
+    p_total_value DECIMAL(15,2),
+    p_date DATE,
+    p_observations TEXT,
+    p_document_support VARCHAR(100),
+    p_user_id INTEGER
+) RETURNS INTEGER AS $$
+DECLARE
+    v_movement_id INTEGER;
+    v_counterpart_type_id INTEGER;
+    v_line_number INTEGER := 1;
+BEGIN
+    -- Create main movement
+    INSERT INTO budget_movement (
+        movement_number, movement_type_id, document_origin_id, total_movement_value,
+        movement_date, observations, document_support, user_id, approval_date,
+        status, is_active, created_at, updated_at
+    ) VALUES (
+        'MOV-' || TO_CHAR(CURRENT_DATE, 'YYYY') || '-' || LPAD(NEXTVAL('movement_seq')::TEXT, 3, '0'),
+        p_movement_type_id, p_document_origin_id, p_total_value, p_date,
+        p_observations, p_document_support, p_user_id, CURRENT_TIMESTAMP,
+        'APPROVED', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    ) RETURNING id INTO v_movement_id;
+
+    -- Create main line
+    INSERT INTO budget_movement_detail (
+        movement_id, line_number, movement_type_id, affected_document_id,
+        line_value, line_observations, is_active, created_at, updated_at
+    ) VALUES (
+        v_movement_id, v_line_number, p_movement_type_id, p_document_origin_id,
+        p_total_value, 'Main movement line', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    );
+
+    -- Create automatic counterpart lines
+    FOR v_counterpart_type_id IN 
+        SELECT counterpart_movement_type_id 
+        FROM movement_type_counterpart 
+        WHERE main_movement_type_id = p_movement_type_id 
+        AND is_automatic = true
+        ORDER BY execution_order
+    LOOP
+        v_line_number := v_line_number + 1;
+        
+        INSERT INTO budget_movement_detail (
+            movement_id, line_number, movement_type_id, affected_document_id,
+            line_value, line_observations, is_active, created_at, updated_at
+        ) VALUES (
+            v_movement_id, v_line_number, v_counterpart_type_id, 
+            -- Determine affected document based on counterpart type
+            CASE 
+                WHEN v_counterpart_type_id IN (7, 6) THEN 1  -- PG
+                WHEN v_counterpart_type_id IN (9, 10, 15) THEN 2  -- CDP
+                WHEN v_counterpart_type_id IN (12, 13) THEN 3  -- RP
+                ELSE p_document_origin_id
+            END,
+            p_total_value, 'Automatic counterpart', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        );
+    END LOOP;
+
+    RETURN v_movement_id;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+---
+
+## NEW MODEL: CDP RELEASES AND RP LIQUIDATIONS AS INDEPENDENT DOCUMENTS
+
+### Document Type Extensions
+
+The updated model treats CDP releases and RP liquidations as independent budget documents, providing better traceability and auditability.
+
+**New Document Types:**
+- **CDP Release** (document_type_id = 8) - Independent document
+- **RP Liquidation** (document_type_id = 9) - Independent document
+
+### Updated Movement Flow
+
+**CDP Release Process:**
+1. **MOV-XXX**: CDP Release document issuance
+   - Line 1: +$Amount → CDP Release document (new document)
+   - Line 2: -$Amount → CDP (automatic counterpart)
+2. **MOV-XXX-B**: Automatic restoration to PG
+   - Line 1: +$Amount → PG (restoration)
+
+**RP Liquidation Process:**
+1. **MOV-XXX**: RP Liquidation document issuance
+   - Line 1: +$Amount → RP Liquidation document (new document)
+   - Line 2: -$Amount → RP (automatic counterpart)
+2. **MOV-XXX-B**: Automatic restoration to CDP
+   - Line 1: +$Amount → CDP (restoration)
+
+### Advantages of the New Model
+
+1. **Complete Traceability**
+   - Each release/liquidation has its own document with unique number
+   - Enhanced audit trail for administrative decisions
+   - Specific reports by document type
+
+2. **Separation of Responsibilities**
+   - Document creation: Administrative decision recording
+   - Budget affectation: Automatic impact on related documents
+   - Restoration: Automatic resource return to origin
+
+3. **Double Counterpart**
+   - Document increment + automatic reduction + automatic restoration
+   - Maintains budget balance throughout the process
+
+4. **Operational Flexibility**
+   - Partial releases: Multiple releases from same CDP
+   - Staged liquidations: Liquidation by phases of same RP
+   - Cancellations: Reversal of releases/liquidations with traceability
+
+5. **Referential Integrity**
+   - Document relationships: Each release/liquidation references its source document
+   - Automatic validations: Value and state controls
+   - Reconciliation: Automatic balance between documents
+
+6. **Accounting Benefits**
+   - Accounts receivable: Releases generate state receivables
+   - Accounts payable: Liquidations generate contractor payables
+   - Financial statements: Better representation of financial position
+
+### Model Comparison
+
+| Aspect | Previous Model | New Model |
+|---------|----------------|-----------|
+| **CDP Release** | Simple movement | Document + Movement |
+| **RP Liquidation** | Simple movement | Document + Movement |
+| **Traceability** | Limited | Complete |
+| **Auditability** | Basic | Advanced |
+| **Flexibility** | Rigid | High |
+| **Reports** | Limited | Complete |
+| **Integrity** | Manual | Automatic |
+
+This enhanced model provides a more robust, auditable, and flexible framework while maintaining budget integrity and providing better traceability for administrative operations.

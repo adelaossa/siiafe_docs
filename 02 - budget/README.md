@@ -127,6 +127,28 @@ Este módulo es parte del proyecto SIIAFE. Por favor, consulte la documentación
 - **TRAZABILIDAD MEJORADA**: Pista de auditoría completa desde documentos origen hasta egresos finales
 - **FLEXIBILIDAD MEJORADA**: Soporte para escenarios del mundo real donde documentos combinan múltiples fuentes
 
+#### **New Model: CDP Releases and RP Liquidations as Independent Documents**
+The system now treats CDP releases and RP liquidations as independent budget documents, providing enhanced traceability and auditability.
+
+**Key Changes:**
+- **CDP Release Document**: Independent document type with unique numbering
+- **RP Liquidation Document**: Independent document type with unique numbering  
+- **Automatic Counterparts**: Enhanced movement model with automatic counterpart generation
+- **Double Restoration**: Documents creation + automatic affectation + automatic restoration
+- **Complete Traceability**: Full audit trail for administrative decisions
+
+#### **Nuevo Modelo: Liberaciones CDP y Liquidaciones RP como Documentos Independientes**
+El sistema ahora trata las liberaciones CDP y liquidaciones RP como documentos presupuestales independientes, proporcionando mayor trazabilidad y auditabilidad.
+
+**Cambios Principales:**
+- **Documento Liberación CDP**: Tipo de documento independiente con numeración única
+- **Documento Liquidación RP**: Tipo de documento independiente con numeración única
+- **Contrapartidas Automáticas**: Modelo de movimientos mejorado con generación automática de contrapartidas
+- **Restauración Doble**: Creación de documentos + afectación automática + restauración automática
+- **Trazabilidad Completa**: Historial completo de auditoría para decisiones administrativas
+
+---
+
 ## Practical Examples / Ejemplos Prácticos
 
 ### Complete Budget Flow Example / Ejemplo de Flujo Presupuestal Completo

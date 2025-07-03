@@ -89,6 +89,83 @@ RP → Causación Obligación → Expedición Orden → Pago
 Orden de Pago → Autorización → Egreso → Registro Contable
 ```
 
+### 6. Liberación CDP
+**Propósito**: Documento que formaliza la devolución de recursos no utilizados de un Certificado de Disponibilidad Presupuestal.
+
+**Características**:
+- Se genera como documento independiente con número único
+- Libera recursos comprometidos en un CDP que no se van a ejecutar
+- Restaura automáticamente la disponibilidad en el Presupuesto de Gasto
+- Mejora la trazabilidad de liberaciones parciales o totales
+- Permite auditoría completa de decisiones administrativas
+
+**Flujo Típico**:
+```
+CDP → Análisis de Ejecución → Expedición Liberación → Restauración PG
+```
+
+**Nuevo Modelo de Afectación**:
+```
+MOV-XXX: Expedición Liberación CDP
+├── Línea 1: +$Valor → Liberación CDP (documento nuevo)
+└── Línea 2: -$Valor → CDP (contrapartida automática)
+
+MOV-XXX-B: Restauración automática al PG
+├── Línea 1: +$Valor → PG (restauración disponibilidad)
+```
+
+### 7. Liquidación RP
+**Propósito**: Documento que formaliza la liquidación y cierre de un Registro Presupuestal con devolución de saldos no ejecutados.
+
+**Características**:
+- Se genera como documento independiente con número único
+- Liquida saldos no ejecutados de un RP finalizado
+- Restaura automáticamente la disponibilidad en el CDP origen
+- Permite liquidaciones parciales por fases de contrato
+- Genera cuenta por pagar si corresponde a liquidación definitiva
+
+**Flujo Típico**:
+```
+RP → Finalización/Liquidación → Expedición Liquidación → Restauración CDP
+```
+
+**Nuevo Modelo de Afectación**:
+```
+MOV-XXX: Expedición Liquidación RP
+├── Línea 1: +$Valor → Liquidación RP (documento nuevo)
+└── Línea 2: -$Valor → RP (contrapartida automática)
+
+MOV-XXX-B: Restauración automática al CDP
+├── Línea 1: +$Valor → CDP (restauración disponibilidad)
+```
+
+### Ventajas del Nuevo Modelo de Liberaciones y Liquidaciones
+
+**1. Trazabilidad Completa**
+- Cada liberación y liquidación tiene documento propio
+- Numeración única y consecutiva
+- Historial completo de decisiones administrativas
+
+**2. Separación de Responsabilidades**
+- Creación del documento: Decisión administrativa
+- Afectación presupuestal: Impacto automático
+- Restauración: Devolución automática de recursos
+
+**3. Flexibilidad Operativa**
+- Liberaciones parciales de un mismo CDP
+- Liquidaciones escalonadas por fases
+- Cancelaciones con trazabilidad completa
+
+**4. Integridad Automática**
+- Contrapartidas automáticas garantizan balance
+- Validaciones automáticas de valores y estados
+- Conciliación automática entre documentos
+
+**5. Beneficios Contables**
+- Mejor representación en estados financieros
+- Cuentas por cobrar/pagar claramente identificadas
+- Auditoría mejorada de operaciones presupuestales
+
 ## Modelo de Datos
 
 ### Diagrama de Relación de Entidades
@@ -692,5 +769,3 @@ LEFT JOIN (
 WHERE d.tipo_documento_id = (SELECT id FROM tipo_documento_presupuestal WHERE codigo = 'CDP')
     AND d.es_activo = true;
 ```
-
-// ...existing code...

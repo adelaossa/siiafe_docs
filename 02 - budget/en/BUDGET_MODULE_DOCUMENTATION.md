@@ -89,6 +89,83 @@ RP → Obligation Accrual → Order Issuance → Payment
 Payment Order → Authorization → Disbursement → Accounting Record
 ```
 
+### 6. CDP Release
+**Purpose**: Document that formalizes the return of unused resources from a Budget Availability Certificate.
+
+**Characteristics**:
+- Generated as independent document with unique number
+- Releases resources committed in a CDP that will not be executed
+- Automatically restores availability in the Expenditure Budget
+- Improves traceability of partial or total releases
+- Enables complete audit of administrative decisions
+
+**Typical Flow**:
+```
+CDP → Execution Analysis → Release Issuance → PG Restoration
+```
+
+**New Affectation Model**:
+```
+MOV-XXX: CDP Release Issuance
+├── Line 1: +$Amount → CDP Release (new document)
+└── Line 2: -$Amount → CDP (automatic counterpart)
+
+MOV-XXX-B: Automatic restoration to PG
+├── Line 1: +$Amount → PG (availability restoration)
+```
+
+### 7. RP Liquidation
+**Purpose**: Document that formalizes the liquidation and closure of a Budget Registration with return of unexecuted balances.
+
+**Characteristics**:
+- Generated as independent document with unique number
+- Liquidates unexecuted balances from a finalized RP
+- Automatically restores availability in the source CDP
+- Allows partial liquidations by contract phases
+- Generates accounts payable if corresponding to definitive liquidation
+
+**Typical Flow**:
+```
+RP → Completion/Liquidation → Liquidation Issuance → CDP Restoration
+```
+
+**New Affectation Model**:
+```
+MOV-XXX: RP Liquidation Issuance
+├── Line 1: +$Amount → RP Liquidation (new document)
+└── Line 2: -$Amount → RP (automatic counterpart)
+
+MOV-XXX-B: Automatic restoration to CDP
+├── Line 1: +$Amount → CDP (availability restoration)
+```
+
+### Advantages of New Release and Liquidation Model
+
+**1. Complete Traceability**
+- Each release and liquidation has its own document
+- Unique and consecutive numbering
+- Complete history of administrative decisions
+
+**2. Separation of Responsibilities**
+- Document creation: Administrative decision
+- Budget affectation: Automatic impact
+- Restoration: Automatic resource return
+
+**3. Operational Flexibility**
+- Partial releases from same CDP
+- Staged liquidations by phases
+- Cancellations with complete traceability
+
+**4. Automatic Integrity**
+- Automatic counterparts guarantee balance
+- Automatic validations of values and states
+- Automatic reconciliation between documents
+
+**5. Accounting Benefits**
+- Better representation in financial statements
+- Clearly identified accounts receivable/payable
+- Improved audit of budget operations
+
 ## Data Model
 
 ### Entity Relationship Diagram
