@@ -202,6 +202,36 @@ MOV-XXX-B: Automatic restoration to CDP
 │ • is_active     │              │            └─────────────────┘
 │ • created_at    │              │
 │ • updated_at    │              │
+└─────────┬───────┘              │
+          │                      │
+          ▼                      │
+┌─────────────────┐              │
+│ DOCUMENT_TYPE_  │              │
+│   PRECEDENT     │              │
+│                 │              │
+│ • id            │              │
+│ • doc_type_id   │              │
+│ • precedent_id  │              │
+│ • is_mandatory  │              │
+│ • precedence_ord│              │
+│ • description   │              │
+│ • is_active     │              │
+│ • created_at    │              │
+│ • updated_at    │              │
+└─────────┬───────┘              │
+          │                      │
+          ▼                      │
+┌─────────────────┐              │
+│ PRECEDENT_STATE_│              │
+│   REQUIRED      │              │
+│                 │              │
+│ • id            │              │
+│ • precedent_id  │              │
+│ • required_state│              │
+│ • description   │              │
+│ • is_active     │              │
+│ • created_at    │              │
+│ • updated_at    │              │
 └─────────────────┘              │
                                  │
                                  │
@@ -471,6 +501,76 @@ Details how each movement is distributed among specific items.
 | detail_description | VARCHAR(500) | Specific detail description |
 | created_at | TIMESTAMP | Creation timestamp |
 | updated_at | TIMESTAMP | Last update timestamp |
+
+#### 7. DOCUMENT_TYPE_PRECEDENT
+Defines which document types can serve as precedents for creating other document types. This table establishes valid relationships between document types according to budget flow.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID/INT | Primary key |
+| document_type_id | UUID/INT | Foreign key to budget_document_type (target document) |
+| precedent_type_id | UUID/INT | Foreign key to budget_document_type (source/precedent document) |
+| is_mandatory | BOOLEAN | Whether the precedent is mandatory to create the document |
+| precedence_order | INT | Precedence order when there are multiple options |
+| description | TEXT | Description of the precedence relationship |
+| is_active | BOOLEAN | Active status |
+| created_at | TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | Last update timestamp |
+
+**Configuration Examples**:
+```sql
+INSERT INTO document_type_precedent VALUES 
+-- CDP must be preceded by PG
+(1, 2, 1, true, 1, 'CDP must originate from an Expenditure Budget', true, NOW(), NOW()),
+-- RP must be preceded by CDP  
+(2, 3, 2, true, 1, 'RP must originate from a CDP', true, NOW(), NOW()),
+-- Payment Order must be preceded by RP
+(3, 4, 3, true, 1, 'Payment Order must originate from an RP', true, NOW(), NOW());
+```
+
+#### 8. PRECEDENT_STATE_REQUIRED
+Defines which specific states precedent documents must have to create a new document. This table extends the precedent configuration by specifying valid states.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID/INT | Primary key |
+| document_type_precedent_id | UUID/INT | Foreign key to document_type_precedent |
+| required_state | VARCHAR(50) | State that the precedent document must have |
+| description | TEXT | Description of why this state is required |
+| is_active | BOOLEAN | Active status |
+| created_at | TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | Last update timestamp |
+
+**Configuration Examples**:
+```sql
+INSERT INTO precedent_state_required VALUES 
+-- To create CDP from PG, the PG must be ACTIVE
+(1, 1, 'ACTIVE', 'The Expenditure Budget must be active to issue CDPs', true, NOW(), NOW()),
+-- To create RP from CDP, the CDP can be ISSUED or COMMITTED
+(2, 2, 'ISSUED', 'The CDP must be issued to create an RP', true, NOW(), NOW()),
+(3, 2, 'COMMITTED', 'A committed CDP can generate additional RPs if it has balance', true, NOW(), NOW()),
+-- To create Payment Order from RP, the RP must be ISSUED or OBLIGATED
+(4, 3, 'ISSUED', 'The RP must be issued to create a Payment Order', true, NOW(), NOW()),
+(5, 3, 'OBLIGATED', 'An obligated RP can generate additional Payment Orders if it has pending balance', true, NOW(), NOW());
+```
+
+**Use Cases for Required States**:
+
+1. **State Flexibility**: Allows a precedent document to be in multiple valid states
+2. **Flow Control**: Prevents creation of documents from precedents in incorrect states
+3. **Automatic Validations**: System automatically validates before creating new documents
+4. **Traceability**: Maintains record of what state the precedent had at creation time
+
+**State Validation Example**:
+
+For creating an RP from a CDP:
+- ✅ **Valid**: CDP in state "ISSUED" → Can create RP
+- ✅ **Valid**: CDP in state "COMMITTED" → Can create additional RP if balance exists
+- ❌ **Invalid**: CDP in state "RELEASED" → Cannot create RP
+- ❌ **Invalid**: CDP in state "EXPIRED" → Cannot create RP
+
+The system will automatically validate these conditions and show appropriate error messages when validation fails.
+```
 
 ## Budget Process Flows
 

@@ -202,6 +202,37 @@ MOV-XXX-B: Restauración automática al CDP
 │ • es_activo     │              │            │ • updated_at    │
 │ • created_at    │              │            └─────────────────┘
 │ • updated_at    │              │
+└─────────┬───────┘              │
+          │                      │
+          ▼                      │
+┌─────────────────┐              │
+│ DOCUMENTO_TIPO_ │              │
+│   PRECEDENTE    │              │
+│                 │              │
+│ • id            │              │
+│ • tipo_doc_id   │              │
+│ • tipo_prec_id  │              │
+│ • es_obligatorio│              │
+│ • orden_prec    │              │
+│ • descripcion   │              │
+│ • es_activo     │              │
+│ • created_at    │              │
+│ • updated_at    │              │
+└─────────┬───────┘              │
+          │                      │
+          ▼                      │
+┌─────────────────┐              │
+│ DOC_PRECEDENTE_ │              │
+│ ESTADO_REQUERIDO│              │
+│                 │              │
+│ • id            │              │
+│ • doc_precedente│              │
+│   _id           │              │
+│ • estado_req    │              │
+│ • descripcion   │              │
+│ • es_activo     │              │
+│ • created_at    │              │
+│ • updated_at    │              │
 └─────────────────┘              │
                                  │
                                  │
@@ -406,54 +437,74 @@ INSERT INTO relacion_documento_presupuestal VALUES
 (7, 1, 1, 'MODIFICA', 75000000.00, NULL, '{"tipo_modificacion": "ADICION", "rubro": "220101", "acto_admin": "Decreto 001-2025"}', '2025-02-10', true);
 ```
 
-#### 7. MOVIMIENTO_PRESUPUESTAL
-Registra todos los movimientos que afectan los documentos presupuestales.
+#### 7. DOCUMENTO_TIPO_PRECEDENTE
+Define qué tipos de documentos pueden servir como precedentes para crear otros tipos de documentos. Esta tabla establece las relaciones válidas entre tipos de documentos según el flujo presupuestal.
 
 | Columna | Tipo | Descripción |
 |---------|------|-------------|
 | id | UUID/INT | Llave primaria |
-| numero_movimiento | VARCHAR(50) | Número único del movimiento |
-| tipo_movimiento | VARCHAR(50) | Tipo de movimiento (ADICION, REDUCCION, TRASLADO, etc.) |
-| documento_origen_id | UUID/INT | Documento que se ve afectado (reduce valor) - **OPCIONAL** |
-| documento_destino_id | UUID/INT | Documento beneficiario (aumenta valor) - **OPCIONAL** |
-| valor_total_movimiento | DECIMAL(18,2) | Valor total del movimiento |
-| fecha_movimiento | DATE | Fecha del movimiento |
-| descripcion_movimiento | TEXT | Descripción del motivo del movimiento |
-| documento_soporte | VARCHAR(255) | Referencia del documento soporte |
-| usuario_autoriza_id | UUID/INT | Usuario que autoriza el movimiento |
-| fecha_autorizacion | TIMESTAMP | Fecha de autorización |
-| estado_movimiento | VARCHAR(50) | Estado del movimiento |
+| tipo_documento_id | UUID/INT | Llave foránea hacia tipo_documento_presupuestal (documento destino) |
+| tipo_documento_precedente_id | UUID/INT | Llave foránea hacia tipo_documento_presupuestal (documento origen/precedente) |
+| es_obligatorio | BOOLEAN | Si el precedente es obligatorio para crear el documento |
+| orden_precedencia | INT | Orden de precedencia cuando hay múltiples opciones |
+| descripcion | TEXT | Descripción de la relación de precedencia |
 | es_activo | BOOLEAN | Estado activo |
 | creado_en | TIMESTAMP | Marca de tiempo de creación |
 | actualizado_en | TIMESTAMP | Marca de tiempo de última actualización |
 
-#### 8. DETALLE_MOVIMIENTO_DOCUMENTO
-Detalla qué documentos específicos participan en cada movimiento.
+**Ejemplos de Configuración**:
+```sql
+INSERT INTO documento_tipo_precedente VALUES 
+-- CDP debe estar precedido por PG
+(1, 2, 1, true, 1, 'CDP debe originarse desde un Presupuesto de Gasto', true, NOW(), NOW()),
+-- RP debe estar precedido por CDP  
+(2, 3, 2, true, 1, 'RP debe originarse desde un CDP', true, NOW(), NOW()),
+-- OP debe estar precedida por RP
+(3, 4, 3, true, 1, 'OP debe originarse desde un RP', true, NOW(), NOW());
+```
+
+#### 8. DOCUMENTO_PRECEDENTE_ESTADO_REQUERIDO
+Define qué estados específicos deben tener los documentos precedentes para poder crear un nuevo documento. Esta tabla extiende la configuración de precedentes especificando los estados válidos.
 
 | Columna | Tipo | Descripción |
 |---------|------|-------------|
 | id | UUID/INT | Llave primaria |
-| movimiento_id | UUID/INT | Llave foránea hacia movimiento_presupuestal |
-| documento_origen_id | UUID/INT | Documento origen específico en el movimiento |
-| documento_destino_id | UUID/INT | Documento destino específico en el movimiento |
-| valor_documento | DECIMAL(18,2) | Valor específico del documento en el movimiento |
-| descripcion_documento | VARCHAR(500) | Descripción específica del documento en el movimiento |
+| documento_tipo_precedente_id | UUID/INT | Llave foránea hacia documento_tipo_precedente |
+| estado_requerido | VARCHAR(50) | Estado que debe tener el documento precedente |
+| descripcion | TEXT | Descripción del por qué se requiere este estado |
+| es_activo | BOOLEAN | Estado activo |
 | creado_en | TIMESTAMP | Marca de tiempo de creación |
 | actualizado_en | TIMESTAMP | Marca de tiempo de última actualización |
 
-#### 9. DETALLE_MOVIMIENTO_ITEM
-Detalla cómo se distribuye cada movimiento entre los ítems específicos.
+**Ejemplos de Configuración**:
+```sql
+INSERT INTO documento_precedente_estado_requerido VALUES 
+-- Para crear CDP desde PG, el PG debe estar VIGENTE
+(1, 1, 'VIGENTE', 'El Presupuesto de Gasto debe estar vigente para expedir CDPs', true, NOW(), NOW()),
+-- Para crear RP desde CDP, el CDP puede estar EXPEDIDO o COMPROMETIDO
+(2, 2, 'EXPEDIDO', 'El CDP debe estar expedido para crear un RP', true, NOW(), NOW()),
+(3, 2, 'COMPROMETIDO', 'Un CDP ya comprometido puede generar RPs adicionales si tiene saldo', true, NOW(), NOW()),
+-- Para crear OP desde RP, el RP debe estar EXPEDIDO u OBLIGADO
+(4, 3, 'EXPEDIDO', 'El RP debe estar expedido para crear una OP', true, NOW(), NOW()),
+(5, 3, 'OBLIGADO', 'Un RP obligado puede generar OPs adicionales si tiene saldo pendiente', true, NOW(), NOW());
+```
 
-| Columna | Tipo | Descripción |
-|---------|------|-------------|
-| id | UUID/INT | Llave primaria |
-| movimiento_id | UUID/INT | Llave foránea hacia movimiento_presupuestal |
-| item_origen_id | UUID/INT | Ítem origen del movimiento |
-| item_destino_id | UUID/INT | Ítem destino del movimiento |
-| valor_movimiento_item | DECIMAL(18,2) | Valor del movimiento para este ítem |
-| descripcion_detalle | VARCHAR(500) | Descripción específica del detalle |
-| creado_en | TIMESTAMP | Marca de tiempo de creación |
-| actualizado_en | TIMESTAMP | Marca de tiempo de última actualización |
+### Validaciones de Precedentes y Estados
+
+1. **Precedencia Válida**: Los documentos solo pueden crearse desde precedentes configurados como válidos
+2. **Estados Requeridos**: El documento precedente debe estar en uno de los estados configurados como válidos
+3. **Múltiples Estados Válidos**: Un precedente puede tener varios estados válidos para la misma operación
+4. **Validación Automática**: El sistema valida automáticamente antes de permitir la creación
+
+**Ejemplos de Validaciones**:
+
+- **Para crear un RP**: El CDP precedente debe estar en estado "EXPEDIDO" o "COMPROMETIDO"
+- **Para crear una OP**: El RP precedente debe estar en estado "EXPEDIDO" u "OBLIGADO"  
+- **Para crear un Egreso**: La OP precedente debe estar en estado "EXPEDIDA"
+
+**Mensajes de Error Configurables**:
+- Si el tipo de precedente no es válido: "El documento origen (tipo X) no es un precedente válido para el tipo de documento destino (Y)"
+- Si el estado no es válido: "El documento origen está en estado 'Z' pero se requiere uno de los estados válidos para esta operación"
 
 ## Flujos de Procesos Presupuestales
 
@@ -687,85 +738,42 @@ graph TD
    - CDP-151: $30,000,000 (nuevo)
 4. Mantener auditoría de la corrección
 
-## Consultas de Composición y Trazabilidad
+### Caso 4: Validación de Estados en Creación de Documentos
 
-### Consulta 1: Composición de Documento
-```sql
--- Obtener la composición completa de un RP
-SELECT 
-    rd.documento_destino_id as rp_id,
-    dd.numero_documento as rp_numero,
-    rd.documento_origen_id as cdp_id,
-    do.numero_documento as cdp_numero,
-    rd.valor_relacion,
-    rd.porcentaje_relacion,
-    rd.metadatos_relacion
-FROM relacion_documento_presupuestal rd
-JOIN documento_presupuestal dd ON rd.documento_destino_id = dd.id
-JOIN documento_presupuestal do ON rd.documento_origen_id = do.id
-WHERE rd.documento_destino_id = :rp_id 
-    AND rd.tipo_relacion = 'INCORPORA'
-    AND rd.es_activo = true;
-```
+**Contexto**: Proceso de creación de RP con validación automática de estados del CDP precedente.
 
-### Consulta 2: Trazabilidad Completa
-```sql
--- Trazabilidad desde PG hasta Egreso
-WITH RECURSIVE trazabilidad AS (
-    -- Caso base: documento inicial
-    SELECT 
-        d.id,
-        d.numero_documento,
-        d.tipo_documento_id,
-        td.codigo as tipo_codigo,
-        d.valor_total_actual,
-        0 as nivel,
-        CAST(d.numero_documento AS VARCHAR(1000)) as ruta
-    FROM documento_presupuestal d
-    JOIN tipo_documento_presupuestal td ON d.tipo_documento_id = td.id
-    WHERE d.id = :documento_inicial_id
-    
-    UNION ALL
-    
-    -- Recursión: documentos relacionados
-    SELECT 
-        dd.id,
-        dd.numero_documento,
-        dd.tipo_documento_id,
-        td.codigo as tipo_codigo,
-        dd.valor_total_actual,
-        t.nivel + 1,
-        t.ruta || ' → ' || dd.numero_documento
-    FROM trazabilidad t
-    JOIN relacion_documento_presupuestal rd ON t.id = rd.documento_origen_id
-    JOIN documento_presupuestal dd ON rd.documento_destino_id = dd.id
-    JOIN tipo_documento_presupuestal td ON dd.tipo_documento_id = td.id
-    WHERE rd.es_activo = true
-)
-SELECT * FROM trazabilidad ORDER BY nivel, numero_documento;
-```
+**Escenario Exitoso**:
+- CDP-150 expedido por $75,000,000 en estado "EXPEDIDO"
+- Solicitud de RP por $40,000,000
 
-### Consulta 3: Disponibilidad con Composición
-```sql
--- Disponibilidad considerando todas las relaciones
-SELECT 
-    d.id,
-    d.numero_documento,
-    d.valor_total_actual,
-    COALESCE(comprometido.total, 0) as valor_comprometido,
-    d.valor_total_actual - COALESCE(comprometido.total, 0) as saldo_disponible
-FROM documento_presupuestal d
-LEFT JOIN (
-    SELECT 
-        rd.documento_origen_id,
-        SUM(rd.valor_relacion) as total
-    FROM relacion_documento_presupuestal rd
-    JOIN documento_presupuestal dd ON rd.documento_destino_id = dd.id
-    WHERE rd.tipo_relacion = 'INCORPORA' 
-        AND rd.es_activo = true
-        AND dd.estado_actual NOT IN ('ANULADO', 'LIBERADO')
-    GROUP BY rd.documento_origen_id
-) comprometido ON d.id = comprometido.documento_origen_id
-WHERE d.tipo_documento_id = (SELECT id FROM tipo_documento_presupuestal WHERE codigo = 'CDP')
-    AND d.es_activo = true;
-```
+**Proceso de Validación**:
+1. **Verificar Precedencia**: Sistema confirma que CDP es precedente válido para RP
+2. **Verificar Estado**: Sistema verifica que "EXPEDIDO" es un estado válido según configuración
+3. **Permitir Creación**: RP-075 se crea exitosamente
+4. **Actualizar Estado**: CDP-150 pasa a estado "COMPROMETIDO"
+
+**Escenario de Error por Estado Inválido**:
+- CDP-151 en estado "LIBERADO"
+- Solicitud de RP por $25,000,000
+
+**Proceso de Validación**:
+1. **Verificar Precedencia**: ✓ CDP es precedente válido para RP
+2. **Verificar Estado**: ✗ "LIBERADO" no es un estado válido para crear RP
+3. **Rechazar Creación**: Sistema muestra error: "El documento origen está en estado 'LIBERADO' pero se requiere uno de los estados válidos (EXPEDIDO, COMPROMETIDO) para esta operación"
+
+**Estados Válidos por Tipo de Documento**:
+
+| Documento Destino | Precedente | Estados Válidos | Descripción |
+|-------------------|------------|-----------------|-------------|
+| CDP | PG | VIGENTE | PG debe estar vigente |
+| RP | CDP | EXPEDIDO, COMPROMETIDO | CDP disponible para compromiso |
+| OP | RP | EXPEDIDO, OBLIGADO | RP con obligaciones pendientes |
+| Egreso | OP | EXPEDIDA | OP autorizada para pago |
+| Liberación CDP | CDP | EXPEDIDO, COMPROMETIDO | CDP con saldo a liberar |
+| Liquidación RP | RP | EXPEDIDO, OBLIGADO | RP con saldo a liquidar |
+
+**Beneficios del Sistema de Validación**:
+- **Prevención de Errores**: Evita crear documentos desde precedentes en estados incorrectos
+- **Consistencia**: Garantiza que el flujo presupuestal se mantenga coherente
+- **Flexibilidad**: Permite múltiples estados válidos según el contexto
+- **Trazabilidad**: Mantiene registro del estado del precedente al momento de la creación

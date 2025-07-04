@@ -288,6 +288,43 @@ INSERT INTO documento_tipo_precedente VALUES
 -- 8 = Liberación CDP, 9 = Liquidación RP
 ```
 
+### Configuración de Estados Requeridos para Documentos Precedentes
+
+```sql
+-- Tabla que define qué estados específicos deben tener los documentos precedentes
+-- para poder crear un nuevo documento. Ejemplo: para crear un RP, el CDP debe estar en "EXPEDIDO" o "COMPROMETIDO"
+-- Columnas: id, documento_tipo_precedente_id, estado_requerido, descripcion, es_activo, creado_en, actualizado_en
+CREATE TABLE documento_precedente_estado_requerido (
+    id SERIAL PRIMARY KEY,
+    documento_tipo_precedente_id INTEGER NOT NULL REFERENCES documento_tipo_precedente(id),
+    estado_requerido VARCHAR(50) NOT NULL,
+    descripcion TEXT,
+    es_activo BOOLEAN DEFAULT TRUE,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(documento_tipo_precedente_id, estado_requerido)
+);
+
+-- Configuración de estados requeridos para las precedencias estándar
+INSERT INTO documento_precedente_estado_requerido VALUES 
+-- Para crear CDP desde PG, el PG debe estar VIGENTE
+(1, 1, 'VIGENTE', 'El Presupuesto de Gasto debe estar vigente para expedir CDPs', true, NOW(), NOW()),
+
+-- Para crear RP desde CDP, el CDP puede estar EXPEDIDO o COMPROMETIDO
+(2, 2, 'EXPEDIDO', 'El CDP debe estar expedido para crear un RP', true, NOW(), NOW()),
+(3, 2, 'COMPROMETIDO', 'Un CDP ya comprometido puede generar RPs adicionales si tiene saldo', true, NOW(), NOW()),
+
+-- Para crear OP desde RP, el RP debe estar EXPEDIDO u OBLIGADO
+(4, 3, 'EXPEDIDO', 'El RP debe estar expedido para crear una OP', true, NOW(), NOW()),
+(5, 3, 'OBLIGADO', 'Un RP obligado puede generar OPs adicionales si tiene saldo pendiente', true, NOW(), NOW()),
+
+-- Para crear Egreso desde OP, la OP debe estar EXPEDIDA
+(6, 4, 'EXPEDIDA', 'La OP debe estar expedida para generar el egreso correspondiente', true, NOW(), NOW()),
+
+-- Para crear Egreso desde Cuenta por Pagar, debe estar APROBADA
+(7, 5, 'APROBADA', 'La Cuenta por Pagar debe estar aprobada para generar el egreso', true, NOW(), NOW());
+```
+
 ### Configuración de Contrapartidas de Movimientos
 
 ```sql
@@ -333,21 +370,46 @@ INSERT INTO movimiento_tipo_contrapartida VALUES
 ### Validación de Documentos Precedentes
 
 ```sql
--- Función para validar que un documento tenga el precedente correcto
+-- Función para validar que un documento tenga el precedente correcto y el estado requerido
 CREATE OR REPLACE FUNCTION validar_documento_precedente()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_estado_origen VARCHAR(50);
+    v_tipo_documento_origen INTEGER;
+    v_tipo_documento_destino INTEGER;
+    v_precedente_id INTEGER;
 BEGIN
     -- Solo validar si el documento tiene un origen definido
     IF NEW.documento_origen_id IS NOT NULL THEN
+        -- Obtener información del documento origen y destino
+        SELECT dp_origen.estado_actual, dp_origen.tipo_documento_id,
+               dp_destino.tipo_documento_id
+        INTO v_estado_origen, v_tipo_documento_origen, v_tipo_documento_destino
+        FROM documento_presupuestal dp_origen
+        JOIN documento_presupuestal dp_destino ON dp_destino.id = NEW.documento_afectado_id
+        WHERE dp_origen.id = NEW.documento_origen_id;
+
+        -- Verificar que existe la relación de precedencia
+        SELECT dtp.id INTO v_precedente_id
+        FROM documento_tipo_precedente dtp
+        WHERE dtp.tipo_documento_id = v_tipo_documento_destino
+          AND dtp.tipo_documento_precedente_id = v_tipo_documento_origen
+          AND dtp.es_activo = true;
+
+        IF v_precedente_id IS NULL THEN
+            RAISE EXCEPTION 'El documento origen (tipo %) no es un precedente válido para el tipo de documento destino (%)', 
+                           v_tipo_documento_origen, v_tipo_documento_destino;
+        END IF;
+
+        -- Verificar que el estado del documento origen es válido
         IF NOT EXISTS (
-            SELECT 1 FROM documento_tipo_precedente dtp
-            JOIN documento_presupuestal dp_origen ON dp_origen.id = NEW.documento_origen_id
-            JOIN documento_presupuestal dp_destino ON dp_destino.id = NEW.documento_afectado_id
-            WHERE dtp.tipo_documento_id = dp_destino.tipo_documento_id
-              AND dtp.tipo_documento_precedente_id = dp_origen.tipo_documento_id
-              AND dtp.es_activo = true
+            SELECT 1 FROM documento_precedente_estado_requerido dper
+            WHERE dper.documento_tipo_precedente_id = v_precedente_id
+              AND dper.estado_requerido = v_estado_origen
+              AND dper.es_activo = true
         ) THEN
-            RAISE EXCEPTION 'El documento origen no es un precedente válido para este tipo de documento';
+            RAISE EXCEPTION 'El documento origen está en estado "%" pero se requiere uno de los estados válidos para esta operación. Consulte los estados requeridos para el tipo de precedencia.', 
+                           v_estado_origen;
         END IF;
     END IF;
     RETURN NEW;
@@ -393,6 +455,103 @@ $$ LANGUAGE plpgsql;
 -- precedente_id | precedente_nombre | es_obligatorio | orden_precedencia | descripcion
 -- 4             | Orden de Pago     | false          | 1                 | Egreso puede originarse desde una OP
 -- 6             | Cuenta por Pagar  | false          | 2                 | Egreso puede originarse desde una Cuenta por Pagar
+```
+
+### Consulta de Estados Requeridos para Precedentes
+
+```sql
+-- Función para consultar los estados requeridos de documentos precedentes
+CREATE OR REPLACE FUNCTION obtener_estados_requeridos_precedente(
+    p_tipo_documento_id INTEGER,
+    p_tipo_documento_precedente_id INTEGER DEFAULT NULL
+)
+RETURNS TABLE (
+    precedente_id INTEGER,
+    precedente_nombre VARCHAR,
+    estado_requerido VARCHAR,
+    descripcion_estado TEXT,
+    descripcion_precedente TEXT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        dtp.tipo_documento_precedente_id,
+        td.nombre,
+        dper.estado_requerido,
+        dper.descripcion,
+        dtp.descripcion
+    FROM documento_tipo_precedente dtp
+    JOIN tipo_documento td ON dtp.tipo_documento_precedente_id = td.id
+    JOIN documento_precedente_estado_requerido dper ON dper.documento_tipo_precedente_id = dtp.id
+    WHERE dtp.tipo_documento_id = p_tipo_documento_id
+      AND dtp.es_activo = true
+      AND dper.es_activo = true
+      AND (p_tipo_documento_precedente_id IS NULL OR dtp.tipo_documento_precedente_id = p_tipo_documento_precedente_id)
+    ORDER BY dtp.orden_precedencia, dper.estado_requerido;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Ejemplos de uso:
+
+-- 1. Consultar todos los estados requeridos para crear un RP (tipo_documento_id = 3)
+-- SELECT * FROM obtener_estados_requeridos_precedente(3);
+-- Resultado:
+-- precedente_id | precedente_nombre | estado_requerido | descripcion_estado | descripcion_precedente
+-- 2             | CDP               | EXPEDIDO         | El CDP debe estar expedido para crear un RP | RP debe originarse desde un CDP
+-- 2             | CDP               | COMPROMETIDO     | Un CDP ya comprometido puede generar RPs adicionales | RP debe originarse desde un CDP
+
+-- 2. Consultar estados específicos para crear un RP desde un CDP
+-- SELECT * FROM obtener_estados_requeridos_precedente(3, 2);
+-- Resultado:
+-- precedente_id | precedente_nombre | estado_requerido | descripcion_estado | descripcion_precedente
+-- 2             | CDP               | EXPEDIDO         | El CDP debe estar expedido para crear un RP | RP debe originarse desde un CDP
+-- 2             | CDP               | COMPROMETIDO     | Un CDP ya comprometido puede generar RPs adicionales | RP debe originarse desde un CDP
+
+-- 3. Función de utilidad para validar si un documento puede ser usado como precedente
+CREATE OR REPLACE FUNCTION puede_usar_documento_como_precedente(
+    p_documento_origen_id INTEGER,
+    p_tipo_documento_destino_id INTEGER
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_estado_origen VARCHAR(50);
+    v_tipo_documento_origen INTEGER;
+    v_precedente_id INTEGER;
+BEGIN
+    -- Obtener estado y tipo del documento origen
+    SELECT estado_actual, tipo_documento_id 
+    INTO v_estado_origen, v_tipo_documento_origen
+    FROM documento_presupuestal 
+    WHERE id = p_documento_origen_id;
+
+    IF v_estado_origen IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Verificar que existe la relación de precedencia
+    SELECT dtp.id INTO v_precedente_id
+    FROM documento_tipo_precedente dtp
+    WHERE dtp.tipo_documento_id = p_tipo_documento_destino_id
+      AND dtp.tipo_documento_precedente_id = v_tipo_documento_origen
+      AND dtp.es_activo = true;
+
+    IF v_precedente_id IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Verificar que el estado es válido
+    RETURN EXISTS (
+        SELECT 1 FROM documento_precedente_estado_requerido dper
+        WHERE dper.documento_tipo_precedente_id = v_precedente_id
+          AND dper.estado_requerido = v_estado_origen
+          AND dper.es_activo = true
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+-- Ejemplo de uso:
+-- SELECT puede_usar_documento_como_precedente(123, 3); -- ¿Puede el documento 123 ser precedente para crear un RP?
+-- TRUE/FALSE
 ```
 
 ---
@@ -892,9 +1051,9 @@ INSERT INTO detalle_movimiento_item VALUES
  '2025-03-01 10:00:00', '2025-03-01 10:00:00'),
 
 -- Ítems afectados del CDP (línea 2 del movimiento - contrapartida)
-(11, 3, 5, NULL, 80000000.00, 'Reducción: CDP Fase 1 por RP', 
+(11, 3, 5, NULL, 80000000.00, 'Reducción: RP Recursos Propios por liquidación', 
  '2025-03-01 10:00:00', '2025-03-01 10:00:00'),
-(12, 3, 6, NULL, 40000000.00, 'Reducción: CDP Fase 2 por RP', 
+(12, 3, 6, NULL, 40000000.00, 'Reducción: RP SGP por liquidación', 
  '2025-03-01 10:00:00', '2025-03-01 10:00:00');
 
 -- Nota: Ambas líneas del movimiento comparten el mismo detalle por ítem
@@ -1054,11 +1213,8 @@ INSERT INTO detalle_movimiento_item VALUES
 (25, 7, 7, NULL, 40000000.00, 'Reducción: RP Recursos Propios por liquidación', 
  '2025-04-30 16:30:00', '2025-04-30 16:30:00'),
 (26, 7, 8, NULL, 20000000.00, 'Reducción: RP SGP por liquidación', 
- '2025-04-30 16:30:00', '2025-04-30 16:30:00');
+ '2025-04-30 16:30:00', '2025-04-30 16:30:00'),
 
--- Detalle por ítem del movimiento de restauración CDP (MOV-006B)
--- Columnas: id, movimiento_id, item_id, item_destino_id, valor_detalle, observaciones, creado_en, actualizado_en
-INSERT INTO detalle_movimiento_item VALUES 
 -- Ítems afectados del CDP (restauración)
 (27, 10, 5, 13, 40000000.00, 'Restauración: CDP Fase 1 desde Liquidación RP', 
  '2025-04-30 16:30:00', '2025-04-30 16:30:00'),
