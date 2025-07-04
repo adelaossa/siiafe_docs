@@ -240,69 +240,6 @@ MOV-XXX-B: Automatic restoration to CDP
                                  │ • created_at    │
                                  │ • updated_at    │
                                  └─────────────────┘
-│ • code          │    │ • id            │    │ • id            │
-│ • name          │    │ • doc_type_id   │    │ • document_id   │
-│ • description   │    │ • number        │    │ • item_number   │
-│ • state_flow    │    │ • date          │    │ • description   │
-│ • is_active     │    │ • state         │    │ • initial_value │
-│ • created_at    │    │ • total_value   │    │ • current_value │
-│ • updated_at    │    │ • current_value │    │ • is_active     │
-└─────────────────┘    │ • observations  │    │ • created_at    │
-          │            │ • user_id       │    │ • updated_at    │
-          │            │ • is_active     │    └─────────┬───────┘
-          │            │ • created_at    │              │
-          │            │ • updated_at    │              │
-          │            └─────────┬───────┘              │
-          │                      │                      │
-          ▼                      │                      ▼
-┌─────────────────┐              │            ┌─────────────────┐
-│ CODE_CONFIG_    │              │            │  ITEM_CODING    │
-│ DOCUMENT_TYPE   │              │            │                 │
-│                 │              │            │ • id            │
-│ • id            │              │            │ • item_id       │
-│ • doc_type_id   │              │            │ • code_type_id  │
-│ • code_type_id  │              │            │ • code_id       │
-│ • is_required   │              │            │ • created_at    │
-│ • capture_order │              │            │ • updated_at    │
-│ • is_active     │              │            └─────────────────┘
-│ • created_at    │              │
-│ • updated_at    │              │
-└─────────────────┘              │
-                                 │
-        ┌────────────────────────┴────────────────────────┐
-        │                                                 │
-        ▼                                                 ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  DOCUMENT_      │    │    MOVEMENT     │    │ MOVEMENT_ITEM_  │◄┐
-│  RELATION       │    │                 │    │    DETAIL       │ │
-│                 │    │ • id            │    │                 │ │
-│ • id            │    │ • number        │    │ • id            │ │
-│ • source_doc_id │    │ • movement_type │    │ • movement_id   ├─┘
-│ • target_doc_id │    │ • total_value   │    │ • source_item_id│
-│ • relation_type │    │ • date          │    │ • target_item_id│
-│ • relation_value│    │ • description   │    │ • value         │
-│ • metadata      │    │ • user_id       │    │ • created_at    │
-│ • is_active     │    │ • state         │    │ • updated_at    │
-│ • created_at    │    │ • is_active     │    └─────────────────┘
-│ • updated_at    │    │ • created_at    │              │
-└─────────────────┘    │ • updated_at    │              │
-                       └─────────────────┘              │
-                                                        │
-                                         ┌──────────────┘
-                                         │
-                                         ▼
-                               ┌─────────────────┐
-                               │ MOVEMENT_DOC_   │
-                               │    DETAIL       │
-                               │                 │
-                               │ • id            │
-                               │ • movement_id   │
-                               │ • source_doc_id │
-                               │ • target_doc_id │
-                               │ • doc_value     │
-                               │ • created_at    │
-                               │ • updated_at    │
-                               └─────────────────┘
 ```
 
 ### Table Definitions
