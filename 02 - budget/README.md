@@ -178,3 +178,19 @@ El sistema ahora trata las liberaciones CDP y liquidaciones RP como documentos p
 - Cálculos y actualizaciones de disponibilidad presupuestal
 - Transiciones de estado y validaciones de documentos
 - Trazabilidad completa desde la apropiación hasta el pago
+
+### Specialized Documentation / Documentación Especializada
+
+#### Budget Flow Examples / Ejemplos de Flujo Presupuestal
+- **English**: [Complete Budget Flow Example](./BUDGET_FLOW_EXAMPLE.md)
+- **Español**: [Ejemplo Completo de Flujo Presupuestal](./es/EJEMPLO_FLUJO_PRESUPUESTAL.md)
+
+#### Document and Movement Management / Gestión de Documentos y Movimientos
+- **English**: [Budget Documents and Movements](./en/BUDGET_DOCUMENTS_AND_MOVEMENTS.md)
+- **Español**: [Documentos y Movimientos Presupuestales](./es/DOCUMENTOS_Y_MOVIMIENTOS_PRESUPUESTALES.md)
+
+#### Advanced Features / Características Avanzadas
+- **Document Precedent Validation**: Configuration of required states for document creation
+- **Automatic Counterparts**: Automatic generation of budget movement counterparts
+- **Multi-document Relations**: Many-to-many relationships between budget documents
+- **Real-time Balance Tracking**: Instant calculation of budget balances and availability
