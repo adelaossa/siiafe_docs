@@ -6,22 +6,24 @@
 The Budget Module is the central core of the SIIAFE system, responsible for managing the entire budget lifecycle of Colombian governmental entities. This module handles everything from initial budget formulation to execution and control of public resources, ensuring compliance with Colombian regulations and transparency in public fund management.
 
 ### Key Features
-- **Budget document management**: Complete lifecycle of budget documents (PG, CDP, RP, Payment Orders, Disbursements)
-- **Movement tracking**: Comprehensive tracking of all budget movements and modifications
-- **Code integration**: Full integration with the configuration module for proper classification
-- **State management**: Configurable document states with validation workflows
-- **Real-time availability**: Instant budget availability queries and validations
-- **Colombian compliance**: Designed to meet Colombian budget regulations and standards
+- **Comprehensive document management**: Complete lifecycle of budget documents with configurable types and workflows
+- **Movement-driven architecture**: All value changes through auditable movements, never direct edits
+- **State-controlled workflow**: Strict document state transitions with prerequisite validations
+- **Realm-based organization**: Multi-realm support with independent numbering and access control
+- **Code inheritance system**: Automatic code inheritance from precedent documents with validation
+- **Real-time availability**: Instant budget availability queries and balance calculations
+- **Colombian compliance**: Full compliance with Colombian budget regulations (CHIP, CGN standards)
 
-### Core Components
-- **Budget Documents**: Main instruments representing different budget operations
-- **Document Items**: Detailed breakdown of documents with proper coding classification
-- **Budget Movements**: Transactions that modify document values (additions, reductions, transfers)
-- **Document Types Configuration**: Flexible configuration of document types and their requirements
+### Documentation Structure
+1. **[01 - Budget Documents](./es/01-DOCUMENTOS_PRESUPUESTALES.md)**: Document types, realm associations, and precedent relationships
+2. **[02 - Document Items](./es/02-ITEMS_DOCUMENTOS_PRESUPUESTALES.md)**: Normalized item model with movement-only value changes
+3. **[03 - Budget Movements](./es/03-MOVIMIENTOS_PRESUPUESTALES.md)**: Movement system, types, and automatic counterparts
+4. **[04 - Document States](./es/04-ESTADOS_DOCUMENTOS_PRESUPUESTALES.md)**: State management with JavaScript-based transitions
+5. **[05 - State Prerequisites](./es/05-PREREQUISITOS_ESTADOS_DOCUMENTOS.md)**: Prerequisite validation system for document operations
+6. **[06 - Item Codes](./es/06-CODIGOS_ITEMS_DOCUMENTOS.md)**: Code assignment and inheritance from precedent documents
 
-### Documentation
-- **English**: [Budget Module Documentation](./en/BUDGET_MODULE_DOCUMENTATION.md)
-- **Español**: [Documentación del Módulo de Presupuesto](./es/DOCUMENTACION_MODULO_PRESUPUESTO.md)
+### Technical Documentation / Documentación Técnica
+- **[📊 Architecture Diagram](./ARCHITECTURE_DIAGRAM.md)**: Complete system architecture with entity relationships and data flows
 
 ---
 
@@ -31,37 +33,55 @@ The Budget Module is the central core of the SIIAFE system, responsible for mana
 El Módulo de Presupuesto es el núcleo central del sistema SIIAFE, responsable de gestionar todo el ciclo de vida presupuestario de las entidades gubernamentales colombianas. Este módulo maneja desde la formulación inicial del presupuesto hasta la ejecución y control de los recursos públicos, garantizando el cumplimiento de las normativas colombianas y la transparencia en el manejo de los fondos públicos.
 
 ### Características Principales
-- **Gestión de documentos presupuestales**: Ciclo completo de documentos presupuestales (PG, CDP, RP, Órdenes de Pago, Egresos)
-- **Seguimiento de movimientos**: Seguimiento integral de todos los movimientos y modificaciones presupuestales
-- **Integración con códigos**: Integración completa con el módulo de configuración para clasificación adecuada
-- **Gestión de estados**: Estados de documento configurables con flujos de validación
-- **Disponibilidad en tiempo real**: Consultas y validaciones instantáneas de disponibilidad presupuestal
-- **Cumplimiento colombiano**: Diseñado para cumplir con las regulaciones y estándares presupuestales colombianos
+- **Gestión integral de documentos**: Ciclo completo de documentos presupuestales con tipos y flujos configurables
+- **Arquitectura basada en movimientos**: Todos los cambios de valor mediante movimientos auditables, nunca ediciones directas
+- **Flujo controlado por estados**: Transiciones estrictas de estados con validaciones de prerequisitos
+- **Organización por ámbitos**: Soporte multi-ámbito con numeración independiente y control de acceso
+- **Sistema de herencia de códigos**: Herencia automática de códigos desde documentos precedentes con validación
+- **Disponibilidad en tiempo real**: Consultas instantáneas de disponibilidad y cálculos de saldos
+- **Cumplimiento colombiano**: Cumplimiento total con regulaciones presupuestales colombianas (CHIP, estándares CGN)
 
-### Componentes Principales
-- **Documentos Presupuestales**: Instrumentos principales que representan diferentes operaciones presupuestales
-- **Ítems de Documento**: Desglose detallado de documentos con clasificación de códigos apropiada
-- **Movimientos Presupuestales**: Transacciones que modifican valores de documentos (adiciones, reducciones, traslados)
-- **Configuración de Tipos de Documento**: Configuración flexible de tipos de documento y sus requisitos
+### Estructura de Documentación
+1. **[01 - Documentos Presupuestales](./es/01-DOCUMENTOS_PRESUPUESTALES.md)**: Tipos de documentos, asociaciones con ámbitos y relaciones precedentes
+2. **[02 - Ítems de Documentos](./es/02-ITEMS_DOCUMENTOS_PRESUPUESTALES.md)**: Modelo normalizado de ítems con cambios de valor solo por movimientos
+3. **[03 - Movimientos Presupuestales](./es/03-MOVIMIENTOS_PRESUPUESTALES.md)**: Sistema de movimientos, tipos y contrapartidas automáticas
+4. **[04 - Estados de Documentos](./es/04-ESTADOS_DOCUMENTOS_PRESUPUESTALES.md)**: Gestión de estados con transiciones basadas en JavaScript
+5. **[05 - Prerequisitos de Estados](./es/05-PREREQUISITOS_ESTADOS_DOCUMENTOS.md)**: Sistema de validación de prerequisitos para operaciones
+6. **[06 - Códigos de Ítems](./es/06-CODIGOS_ITEMS_DOCUMENTOS.md)**: Asignación y herencia de códigos desde documentos precedentes
 
-### Documentación
-- **English**: [Budget Module Documentation](./en/BUDGET_MODULE_DOCUMENTATION.md)
-- **Español**: [Documentación del Módulo de Presupuesto](./es/DOCUMENTACION_MODULO_PRESUPUESTO.md)
+### Documentación Técnica
+- **[📊 Diagrama de Arquitectura](./ARCHITECTURE_DIAGRAM.md)**: Arquitectura completa del sistema con relaciones de entidades y flujos de datos
 
 ## Architecture / Arquitectura
 
-The Budget Module is built around seven core entities / El Módulo de Presupuesto está construido alrededor de siete entidades principales:
+**📊 [Complete Architecture Diagram](./ARCHITECTURE_DIAGRAM.md)** - Comprehensive visual representation of the system architecture with entity relationships, data flows, and technical specifications.
+
+The Budget Module is built around a movement-driven, state-controlled, and realm-based architecture with the following core entities:
 
 ### Core Entities / Entidades Principales:
-1. **Budget Document Type** (Tipo Documento Presupuestal): Document type definitions and configurations
-2. **Code Config Document Type** (Configuración Código Tipo Documento): Code requirements per document type
-3. **Budget Document** (Documento Presupuestal): Main budget document records
-4. **Budget Document Item** (Ítem Documento Presupuestal): Individual items within documents
-5. **Budget Item Coding** (Codificación Ítem Presupuestal): Code assignments to items
-6. **Budget Document Relation** (Relación Documento Presupuestal): Many-to-many relationships between documents
-7. **Budget Movement** (Movimiento Presupuestal): Movement transactions between documents
-8. **Movement Document Detail** (Detalle Movimiento Documento): Document-level movement details
-9. **Movement Item Detail** (Detalle Movimiento Ítem): Item-level movement details
+
+#### Configuration Layer / Capa de Configuración:
+1. **Budget Document Type** (Tipo Documento Presupuestal): Document type definitions and workflow configurations
+2. **Code Config Document Type** (Configuración Código Tipo Documento): Code requirements and inheritance rules per document type  
+3. **Realm** (Ámbito): Organizational scopes with independent numbering and access control
+4. **Realm-Document Type Association** (Tipo Ámbito Documento): Many-to-many associations between realms and document types
+5. **State Prerequisites** (Prerequisitos Estado Documento): Required states for document operations and transitions
+
+#### Document Layer / Capa de Documentos:
+6. **Budget Document** (Documento Presupuestal): Main budget document records with realm assignment
+7. **Budget Document Item** (Ítem Documento Presupuestal): Individual items within documents with movement-only balance changes
+8. **Budget Item Coding** (Codificación Ítem Presupuestal): Code assignments to items with inheritance from precedents
+9. **Budget Document Relation** (Relación Documento Presupuestal): Many-to-many relationships between documents
+
+#### Movement Layer / Capa de Movimientos:
+10. **Budget Movement** (Movimiento Presupuestal): Movement transactions with automatic counterpart generation
+11. **Movement Document Detail** (Detalle Movimiento Documento): Document-level movement effects
+12. **Movement Item Detail** (Detalle Movimiento Ítem): Item-level movement details and balance updates
+
+#### State Management Layer / Capa de Gestión de Estados:
+13. **Document State** (Estado Documento Presupuestal): State tracking with timestamp and user information
+14. **State Flow Transition** (Transición Flujo Estado Documento): JavaScript-based automatic and manual transitions
+15. **State Annexes** (Anexo Estado Documento): Additional state-specific data and configurations
 
 ## Document Types / Tipos de Documento
 
@@ -81,23 +101,57 @@ Authorizes obligation payment / Autoriza pago de obligación
 Records actual resource outflow / Registra salida efectiva de recursos
 
 ## Technology Stack / Stack Tecnológico
-- Backend: NestJS with TypeScript
-- Database: TBD (PostgreSQL recommended)
-- Integration: Configuration module for code management
-- API: RESTful with real-time validation endpoints
-- Validation: Real-time budget availability and coding validation
+- **Backend**: NestJS with TypeScript (recommended)
+- **Database**: PostgreSQL with comprehensive constraints and triggers
+- **Architecture**: Movement-driven, state-controlled, realm-based design
+- **Integration**: Configuration module for code structure management
+- **API**: RESTful with real-time validation and movement processing
+- **Validation**: Real-time budget availability, state transitions, and coding validation
+- **State Management**: JavaScript-based condition evaluation for automatic transitions
+- **Audit**: Complete movement-based audit trail with timestamp and user tracking
 
 ## Development Status / Estado de Desarrollo
 
-🚧 **In Planning Phase / En Fase de Planificación**
+� **Documentation Complete - Implementation Ready / Documentación Completa - Listo para Implementación**
 
-### Next Steps / Próximos Pasos
-1. Database schema implementation / Implementación del esquema de base de datos
-2. Core API development / Desarrollo de API principal  
-3. Document workflow engine / Motor de flujo de documentos
-4. Real-time validation system / Sistema de validación en tiempo real
-5. Integration with configuration module / Integración con módulo de configuración
-6. Budget availability calculation engine / Motor de cálculo de disponibilidad presupuestal
+### ✅ Completed / Completado
+1. **Complete modular documentation** / Documentación modular completa
+2. **Normalized data model design** / Diseño de modelo de datos normalizado
+3. **Movement-driven architecture specification** / Especificación de arquitectura basada en movimientos
+4. **State management system design** / Diseño de sistema de gestión de estados
+5. **Code inheritance logic definition** / Definición de lógica de herencia de códigos
+6. **Prerequisite validation framework** / Marco de validación de prerequisitos
+7. **Realm-based organization structure** / Estructura de organización por ámbitos
+8. **SQL examples and validation functions** / Ejemplos SQL y funciones de validación
+
+### 🔄 Ready for Implementation / Listo para Implementación
+1. **Database schema implementation** / Implementación del esquema de base de datos
+2. **Core API development** / Desarrollo de API principal  
+3. **Document workflow engine** / Motor de flujo de documentos
+4. **Real-time validation system** / Sistema de validación en tiempo real
+5. **Movement processing engine** / Motor de procesamiento de movimientos
+6. **State transition automation** / Automatización de transiciones de estado
+7. **Code inheritance automation** / Automatización de herencia de códigos
+
+### 📋 Next Development Phases / Próximas Fases de Desarrollo
+
+#### Phase 1: Core Implementation / Fase 1: Implementación Central
+- Database schema creation with all tables and constraints
+- Basic CRUD operations for all entities
+- Movement processing with automatic counterparts
+- State validation and transition logic
+
+#### Phase 2: Advanced Features / Fase 2: Características Avanzadas  
+- Real-time balance calculation engine
+- JavaScript-based state condition evaluation
+- Code inheritance automation
+- Prerequisite validation enforcement
+
+#### Phase 3: Integration & Optimization / Fase 3: Integración y Optimización
+- Integration with configuration module for code management
+- Performance optimization for large datasets
+- Advanced reporting and analytics
+- Comprehensive audit trail implementation
 
 ### Dependencies / Dependencias
 - **Configuration Module**: Required for code structure and classification
@@ -111,41 +165,39 @@ Este módulo es parte del proyecto SIIAFE. Por favor, consulte la documentación
 
 ### Recent Updates / Actualizaciones Recientes
 
-#### Version 1.1 - Many-to-Many Document Relationships / Relaciones Muchos-a-Muchos entre Documentos
+#### Version 2.0 - Complete Modular Restructure / Reestructuración Modular Completa
 
 **English**: 
-- **CORRECTION**: Replaced single document origin reference with many-to-many relationship model
-- **NEW TABLE**: `BUDGET_DOCUMENT_RELATION` enables complex document relationships
-- **USE CASES**: RP can now incorporate multiple CDPs, Payment Orders can consolidate multiple RPs
-- **ENHANCED TRACEABILITY**: Complete audit trail from source documents to final disbursements
-- **IMPROVED FLEXIBILITY**: Support for real-world scenarios where documents combine multiple sources
+- **COMPLETE REWRITE**: All documentation restructured into modular, conceptual components
+- **MOVEMENT-DRIVEN ARCHITECTURE**: All value changes through auditable movements, zero direct edits
+- **REALM-BASED ORGANIZATION**: Multi-realm support with mandatory ámbito assignment for all documents
+- **STATE-CONTROLLED WORKFLOW**: Strict state transitions with JavaScript-based conditions and prerequisite validation
+- **CODE INHERITANCE SYSTEM**: Automatic code inheritance from precedent documents with configurable requirements
+- **ENHANCED AUDITABILITY**: Complete audit trail for all operations with normalized data model
+- **MODULAR DOCUMENTATION**: Six specialized documents covering each core concept independently
 
 **Español**:
-- **CORRECCIÓN**: Reemplazado referencia única de documento origen con modelo de relaciones muchos-a-muchos
-- **NUEVA TABLA**: `RELACION_DOCUMENTO_PRESUPUESTAL` permite relaciones complejas entre documentos
-- **CASOS DE USO**: RP ahora puede incorporar múltiples CDPs, Órdenes de Pago pueden consolidar múltiples RPs
-- **TRAZABILIDAD MEJORADA**: Pista de auditoría completa desde documentos origen hasta egresos finales
-- **FLEXIBILIDAD MEJORADA**: Soporte para escenarios del mundo real donde documentos combinan múltiples fuentes
+- **REESCRITURA COMPLETA**: Toda la documentación reestructurada en componentes modulares y conceptuales
+- **ARQUITECTURA BASADA EN MOVIMIENTOS**: Todos los cambios de valor a través de movimientos auditables, cero ediciones directas
+- **ORGANIZACIÓN POR ÁMBITOS**: Soporte multi-ámbito con asignación obligatoria de ámbito para todos los documentos
+- **FLUJO CONTROLADO POR ESTADOS**: Transiciones estrictas de estados con condiciones basadas en JavaScript y validación de prerequisitos
+- **SISTEMA DE HERENCIA DE CÓDIGOS**: Herencia automática de códigos desde documentos precedentes con requisitos configurables
+- **AUDITABILIDAD MEJORADA**: Rastro completo de auditoría para todas las operaciones con modelo de datos normalizado
+- **DOCUMENTACIÓN MODULAR**: Seis documentos especializados cubriendo cada concepto central independientemente
 
-#### **New Model: CDP Releases and RP Liquidations as Independent Documents**
-The system now treats CDP releases and RP liquidations as independent budget documents, providing enhanced traceability and auditability.
+**New Features / Nuevas Características:**
+- ✅ **Ámbito (Realm) System**: Multi-organizational support with independent document numbering
+- ✅ **Code Inheritance**: Automatic propagation of codes from precedent documents  
+- ✅ **Strict Prerequisites**: Non-bypassable validation of required states for operations
+- ✅ **Movement-Only Changes**: All balance modifications through auditable movement transactions
+- ✅ **JavaScript State Logic**: Flexible, configurable state transition conditions
+- ✅ **Enhanced Relationships**: Many-to-many document associations with value tracking
 
-**Key Changes:**
-- **CDP Release Document**: Independent document type with unique numbering
-- **RP Liquidation Document**: Independent document type with unique numbering  
-- **Automatic Counterparts**: Enhanced movement model with automatic counterpart generation
-- **Double Restoration**: Documents creation + automatic affectation + automatic restoration
-- **Complete Traceability**: Full audit trail for administrative decisions
-
-#### **Nuevo Modelo: Liberaciones CDP y Liquidaciones RP como Documentos Independientes**
-El sistema ahora trata las liberaciones CDP y liquidaciones RP como documentos presupuestales independientes, proporcionando mayor trazabilidad y auditabilidad.
-
-**Cambios Principales:**
-- **Documento Liberación CDP**: Tipo de documento independiente con numeración única
-- **Documento Liquidación RP**: Tipo de documento independiente con numeración única
-- **Contrapartidas Automáticas**: Modelo de movimientos mejorado con generación automática de contrapartidas
-- **Restauración Doble**: Creación de documentos + afectación automática + restauración automática
-- **Trazabilidad Completa**: Historial completo de auditoría para decisiones administrativas
+**Removed Features / Características Eliminadas:**
+- ❌ **Direct Balance Edits**: All value changes now require movement transactions
+- ❌ **Exception Logic**: No bypass mechanisms for business rule validation
+- ❌ **Manual State Transitions**: All transitions now follow configured rules
+- ❌ **Single Document Origins**: Replaced with flexible many-to-many relationships
 
 ---
 
@@ -190,7 +242,11 @@ El sistema ahora trata las liberaciones CDP y liquidaciones RP como documentos p
 - **Español**: [Documentos y Movimientos Presupuestales](./es/DOCUMENTOS_Y_MOVIMIENTOS_PRESUPUESTALES.md)
 
 #### Advanced Features / Características Avanzadas
-- **Document Precedent Validation**: Configuration of required states for document creation
-- **Automatic Counterparts**: Automatic generation of budget movement counterparts
-- **Multi-document Relations**: Many-to-many relationships between budget documents
-- **Real-time Balance Tracking**: Instant calculation of budget balances and availability
+- **Movement-Driven Architecture**: All value changes through auditable movements, never direct edits
+- **Realm-Based Organization**: Multi-realm support with independent numbering and access control  
+- **Code Inheritance System**: Automatic code propagation from precedent documents with validation
+- **State-Controlled Workflow**: JavaScript-based automatic transitions with prerequisite validation
+- **Many-to-Many Document Relations**: Flexible document relationships supporting complex business scenarios
+- **Automatic Counterparts**: Automatic generation of movement counterparts for complete audit trails
+- **Prerequisite Validation**: Strict enforcement of required states for document operations
+- **Real-time Balance Tracking**: Instant calculation of budget balances and availability through movements
